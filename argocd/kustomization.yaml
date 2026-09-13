@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# root Application(bootstrap/root-application.yaml)이 이 경로를 동기화한다.
+# sync wave 순서: AppProject(-20) -> platform controller(-5) -> ApplicationSet(0)
+resources:
+  - appproject.yaml
+  - platform
+  - applicationset.yaml

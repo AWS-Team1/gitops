@@ -1,0 +1,133 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: contacts
+  labels:
+    app: contacts
+    app.kubernetes.io/name: contacts
+    app.kubernetes.io/part-of: bank-app
+spec:
+  type: ClusterIP
+  selector:
+    app: contacts
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contacts
+  labels:
+    app: contacts
+    app.kubernetes.io/name: contacts
+    app.kubernetes.io/part-of: bank-app
+spec:
+  selector:
+    matchLabels:
+      app: contacts
+  template:
+    metadata:
+      labels:
+        app: contacts
+        app.kubernetes.io/name: contacts
+        app.kubernetes.io/part-of: bank-app
+    spec:
+      serviceAccountName: bank-of-anthos
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: contacts
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: contacts
+          image: us-central1-docker.pkg.dev/bank-of-anthos-ci/bank-of-anthos/contacts:v0.6.10
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          env:
+            - name: VERSION
+              value: "1.0"
+            - name: PORT
+              value: "8080"
+            - name: ENABLE_TRACING
+              value: "false"
+            - name: LOG_LEVEL
+              value: info
+            - name: PUB_KEY_PATH
+              value: /tmp/.ssh/jwtRS256.key.pub
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: DB_HOST
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: DB_PORT
+            - name: ACCOUNTS_DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: ACCOUNTS_DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
+            - name: ACCOUNTS_DB_URI
+              value: postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(ACCOUNTS_DB_NAME)
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: secrets-store
+              mountPath: /tmp/.ssh
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-secrets
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: contacts-hpa
+  labels:
+    app: contacts
+    app.kubernetes.io/name: contacts
+    app.kubernetes.io/part-of: bank-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: contacts
+  minReplicas: 1
+  maxReplicas: 2
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

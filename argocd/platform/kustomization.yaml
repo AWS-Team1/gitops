@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# GitOps 가 소유하는 클러스터 add-on.
+#
+# 여기에 없는 것과 그 이유:
+#   - vpc-cni / coredns / kube-proxy / ebs-csi / pod-identity-agent
+#     / aws-secrets-store-csi-driver-provider
+#       -> EKS managed addon. AWS 인프라 수명주기에 속하므로 infra(Terraform) 소유.
+#   - AWS Load Balancer Controller
+#       -> IAM Role + Pod Identity association 이 필요하다. IAM 은 infra 소유이고
+#          현재 infra 의 modules/aws-load-balancer-controller 가 담당한다.
+#          bootstrap-eks.sh 는 이 컨트롤러의 CRD 존재만 확인한다.
+#   - secrets-store-csi-driver (secrets-store-csi-driver.yaml, 참조하지 않음)
+#       -> EKS managed addon aws-secrets-store-csi-driver-provider v3.1.3 이
+#          upstream secrets-store-csi-driver 를 sub-chart 로 함께 설치한다
+#          (namespace aws-secrets-manager, chart 1.6.0). 즉 드라이버와
+#          SecretProviderClass CRD 는 이미 infra(EKS addon) 소유다.
+#          GitOps 가 chart 1.6.1 을 kube-system 에 또 설치하면 cluster-scoped
+#          CRD 소유권을 addon 의 Helm release 와 다투게 되므로 참조하지 않는다.
+#          addon 이 드라이버를 더 이상 번들하지 않게 되면 아래 줄을 다시 넣는다.
+resources:
+  - metrics-server.yaml

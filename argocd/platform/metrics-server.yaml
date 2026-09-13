@@ -1,0 +1,30 @@
+# metrics-server.
+#
+# 왜 GitOps 인가:
+#   base 의 HorizontalPodAutoscaler 가 동작하려면 metrics API 가 필요하다.
+#   AWS IAM 과 무관한 순수 Kubernetes 컨트롤러이므로 GitOps 가 소유한다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: platform
+  source:
+    repoURL: https://kubernetes-sigs.github.io/metrics-server/
+    chart: metrics-server
+    targetRevision: 3.13.0
+    helm:
+      releaseName: metrics-server
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+      - CreateNamespace=false
