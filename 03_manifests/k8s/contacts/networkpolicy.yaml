@@ -1,0 +1,35 @@
+---
+# Source: bank-of-anthos/templates/contacts/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: contacts-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: contacts
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - port: 8080
+  egress:
+    # RDS boa-postgres DB subnet A/C
+    - to:
+        - ipBlock:
+            cidr: 192.168.16.0/24
+        - ipBlock:
+            cidr: 192.168.17.0/24
+      ports:
+        - port: 5432
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+

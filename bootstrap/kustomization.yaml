@@ -1,6 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-# bootstrap-eks.sh 가 이 경로를 build 해서 클러스터에 apply 한다.
-# Argo CD 자체(Helm)는 bootstrap/argocd/values.yaml 로 설치된다.
-resources:
-  - root-application.yaml

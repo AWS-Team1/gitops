@@ -1,0 +1,79 @@
+---
+# Source: bank-of-anthos/templates/ledgerwriter/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledgerwriter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledgerwriter
+  template:
+    metadata:
+      labels:
+        app: ledgerwriter
+    spec:
+      serviceAccountName: bank-of-anthos
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: ledgerwriter
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: ledgerwriter
+          image: public.ecr.aws/w7s8o2h9/bank-app/ledgerwriter:20260903-0ca63b4
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VERSION
+              value: "1.0"
+            - name: PORT
+              value: "8080"
+            - name: ENABLE_TRACING
+              value: "false"
+            - name: LOCAL_ROUTING_NUM
+              value: "883745000"
+            - name: PUB_KEY_PATH
+              value: /tmp/.ssh/jwtRS256.key.pub
+            - name: BALANCES_API_ADDR
+              value: "balancereader:8080"
+            # DB (RDS project-postgres / projectdb)
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: db-secret
+                  key: password
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://project-postgres.cdrje9f5mmv4.ap-northeast-2.rds.amazonaws.com:5432/projectdb"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "$(POSTGRES_USER)"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "$(POSTGRES_PASSWORD)"
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /tmp/.ssh
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-secrets
+

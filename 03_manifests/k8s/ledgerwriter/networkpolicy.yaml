@@ -1,0 +1,42 @@
+---
+# Source: bank-of-anthos/templates/ledgerwriter/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ledgerwriter-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: ledgerwriter
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - port: 8080
+  egress:
+    # RDS boa-postgres DB subnet A/C
+    - to:
+        - ipBlock:
+            cidr: 192.168.16.0/24
+        - ipBlock:
+            cidr: 192.168.17.0/24
+      ports:
+        - port: 5432
+    # balancereader 호출 (송금 전 잔액 확인)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: balancereader
+      ports:
+        - port: 8080
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+

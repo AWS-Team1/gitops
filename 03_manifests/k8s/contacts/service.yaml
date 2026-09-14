@@ -1,0 +1,15 @@
+---
+# Source: bank-of-anthos/templates/contacts/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: contacts
+spec:
+  selector:
+    app: contacts
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+

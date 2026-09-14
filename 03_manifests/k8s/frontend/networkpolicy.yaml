@@ -1,0 +1,46 @@
+---
+# Source: bank-of-anthos/templates/frontend/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 192.168.2.0/24   # ALB public subnet-a
+        - ipBlock:
+            cidr: 192.168.3.0/24   # ALB public subnet-c
+      ports:
+        - port: 8080
+  egress:
+    - to:                          # frontend는 5개 백엔드 서비스 전부와 통신
+        - podSelector:
+            matchLabels:
+              app: userservice
+        - podSelector:
+            matchLabels:
+              app: contacts
+        - podSelector:
+            matchLabels:
+              app: balancereader
+        - podSelector:
+            matchLabels:
+              app: transactionhistory
+        - podSelector:
+            matchLabels:
+              app: ledgerwriter
+      ports:
+        - port: 8080
+    - ports:                       # default-deny 때문에 DNS egress 필수
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
