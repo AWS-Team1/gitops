@@ -7,6 +7,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "0"
 spec:
   project: boa
+  # HARD-CODED: 재사용할 GitHub 조직/저장소/브랜치에 맞게 변경한다.
   source:
     repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
     targetRevision: jiho-test-cd

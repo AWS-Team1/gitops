@@ -1,4 +1,4 @@
-# The ops ALB terminates TLS and forwards HTTP to argocd-server:8080.
+# HARD-CODED: ops ALB가 TLS를 종료하고 argocd-server:8080으로 HTTP 전달하는 환경용이다.
 configs:
   params:
     server.insecure: true

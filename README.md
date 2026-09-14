@@ -3,6 +3,9 @@
 EKS용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
 AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terraform이 소유합니다.
 
+재현 가능한 전체 설치 절차와 `HARD-CODED` 교체 목록은
+[`docs/ARGOCD_EKS_RUNBOOK.md`](docs/ARGOCD_EKS_RUNBOOK.md)를 따릅니다.
+
 ## 구조
 
 ```text
@@ -12,8 +15,11 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 02_scripts/
 ├── bootstrap.sh
 ├── install-argocd.sh
+├── prepare-database-secret.sh
 ├── prepare-jwt.sh
+├── render-aws-runtime.sh
 ├── register-repo.sh
+├── verify-argocd.sh
 └── teardown-cluster.sh
 03_manifests/
 └── eks/
@@ -29,9 +35,11 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 ## 배포 흐름
 
 ```bash
-# AWS Secret, Pod Identity, private DNS 준비 후 실행한다.
-# JWT → Argo CD → 저장소 인증 → Root Application 순서로 진행된다.
-bash 02_scripts/bootstrap.sh
+# 1. Secret 값, Argo CD, UI 노출 준비
+bash 02_scripts/bootstrap.sh prepare
+
+# 2. 런북대로 UI에서 저장소 연결 후 Root 적용
+bash 02_scripts/bootstrap.sh apply-root
 ```
 
 Root Application은 `applications/`를 읽고, child Application이 `shared`,

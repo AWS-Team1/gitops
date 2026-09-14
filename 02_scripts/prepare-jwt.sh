@@ -4,6 +4,7 @@
 set -euo pipefail
 export AWS_PAGER=""
 
+# HARD-CODED: 다른 환경에서는 리전, 계정 ID, Secret 이름을 변경한다.
 REGION=ap-northeast-2
 EXPECTED_ACCOUNT=769413326616        # 팀 계정. 다르면 중단(오배포 방지)
 PRIVATE_SECRET=/boa/jwt/private
