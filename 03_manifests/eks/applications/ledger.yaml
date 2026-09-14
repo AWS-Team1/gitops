@@ -9,12 +9,22 @@ spec:
   project: boa
   source:
     repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
-    targetRevision: dev
+    targetRevision: jiho-test-cd
     path: 03_manifests/eks/ledger
   destination:
     server: https://kubernetes.default.svc
     namespace: bank-of-anthos
   syncPolicy:
     automated:
-      prune: false
+      prune: true
       selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

@@ -7,6 +7,7 @@ resources:
   - secrets.yaml
   - configmap.yaml
   - networkpolicy.yaml
+  - secret-sync.yaml
   - db-bootstrap.yaml
 
 # db-bootstrap Job 이 마운트하는 스키마 SQL. 같은 kustomization 안이라
@@ -20,6 +21,36 @@ configMapGenerator:
 # 생성된 ConfigMap 을 Job(wave -2)보다 먼저(wave -3) sync 하게 한다.
 # annotation 은 name 해시에 들어가지 않으므로 Job 의 참조 이름은 그대로다.
 patches:
+  - target:
+      kind: Namespace
+      name: bank-of-anthos
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          argocd.argoproj.io/sync-wave: "-10"
+  - target:
+      kind: ServiceAccount
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          argocd.argoproj.io/sync-wave: "-5"
+  - target:
+      kind: SecretProviderClass
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          argocd.argoproj.io/sync-wave: "-5"
+  - target:
+      kind: ConfigMap
+      name: bank-of-anthos-env
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          argocd.argoproj.io/sync-wave: "-3"
   - target:
       kind: ConfigMap
       name: db-bootstrap-sql

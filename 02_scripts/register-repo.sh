@@ -7,7 +7,7 @@
 # 남기지 않는다.
 #
 # 저장소 URL 은 origin remote 에서 유도한다(하드코딩 없음).
-# bootstrap-eks.sh --apply 보다 먼저 한 번 실행한다.
+# Root Application 을 적용하기 전에 한 번 실행한다.
 
 set -Eeuo pipefail
 
@@ -65,5 +65,5 @@ stringData:
 YAML
 
 unset github_pat
-echo "등록 완료. 다음: 02_scripts/install-argocd.sh 로 Root Application 을 적용/동기화하세요."
-echo "       (전체 초기화는 02_scripts/bootstrap.sh 가 prepare-jwt → install-argocd → register-repo 순으로 실행)"
+echo "등록 완료. 다음: 01_bootstrap/root-application-eks.yaml 을 적용하세요."
+echo "       (전체 초기화는 02_scripts/bootstrap.sh 가 JWT → Argo CD → 저장소 인증 → Root Application 순으로 실행)"
