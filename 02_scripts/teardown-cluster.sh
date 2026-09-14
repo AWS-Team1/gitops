@@ -8,7 +8,7 @@ export AWS_PAGER=""
 # 환경변수로 덮어쓸 수 있는 기본값
 REGION=${REGION:-ap-northeast-2}
 EXPECTED_ACCOUNT=${EXPECTED_ACCOUNT:-769413326616}   # 팀 계정 가드
-CLUSTER=${CLUSTER:-project-eks}
+CLUSTER=${CLUSTER:-boa-eks}
 ARGOCD_NAMESPACE=${ARGOCD_NAMESPACE:-argocd}
 APP_NAMESPACE=${APP_NAMESPACE:-bank-of-anthos}
 POLL_SECONDS=${POLL_SECONDS:-10}          # ALB 삭제 확인 폴링 간격

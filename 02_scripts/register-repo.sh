@@ -65,4 +65,5 @@ stringData:
 YAML
 
 unset github_pat
-echo "등록 완료. 다음: ./scripts/bootstrap-eks.sh --infra-dir <infra 경로> --environment dev --apply"
+echo "등록 완료. 다음: 02_scripts/install-argocd.sh 로 Root Application 을 적용/동기화하세요."
+echo "       (전체 초기화는 02_scripts/bootstrap.sh 가 prepare-jwt → install-argocd → register-repo 순으로 실행)"

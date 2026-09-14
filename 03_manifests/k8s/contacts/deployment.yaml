@@ -24,7 +24,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: contacts
-          image: public.ecr.aws/w7s8o2h9/bank-app/contacts:20260903-0ca63b4
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-contacts:sha-ce6d9485b1c4c352bb6a033c8fb531f784545cd9
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -39,7 +39,7 @@ spec:
               value: "info"
             - name: PUB_KEY_PATH
               value: /tmp/.ssh/jwtRS256.key.pub
-            # DB (RDS project-postgres / projectdb) — userservice 와 동일 DB
+            # DB (stable private DNS / boadb) — userservice 와 동일 DB
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -51,7 +51,7 @@ spec:
                   name: db-secret
                   key: password
             - name: ACCOUNTS_DB_URI
-              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@project-postgres.cdrje9f5mmv4.ap-northeast-2.rds.amazonaws.com:5432/projectdb"
+              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/boadb"
           volumeMounts:
             - name: secrets-store
               mountPath: /tmp/.ssh

@@ -1,0 +1,20 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: boa-ledger
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  project: boa
+  source:
+    repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
+    targetRevision: dev
+    path: 03_manifests/k8s/groups/ledger
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: bank-of-anthos
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true

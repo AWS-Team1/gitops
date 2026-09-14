@@ -24,7 +24,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: ledgerwriter
-          image: public.ecr.aws/w7s8o2h9/bank-app/ledgerwriter:20260903-0ca63b4
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-ledgerwriter:sha-ce6d9485b1c4c352bb6a033c8fb531f784545cd9
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -41,7 +41,7 @@ spec:
               value: /tmp/.ssh/jwtRS256.key.pub
             - name: BALANCES_API_ADDR
               value: "balancereader:8080"
-            # DB (RDS project-postgres / projectdb)
+            # DB (stable private DNS / boadb)
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -53,7 +53,7 @@ spec:
                   name: db-secret
                   key: password
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://project-postgres.cdrje9f5mmv4.ap-northeast-2.rds.amazonaws.com:5432/projectdb"
+              value: "jdbc:postgresql://db.boa.internal:5432/boadb"
             - name: SPRING_DATASOURCE_USERNAME
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD

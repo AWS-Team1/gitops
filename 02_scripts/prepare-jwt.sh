@@ -6,8 +6,8 @@ export AWS_PAGER=""
 
 REGION=ap-northeast-2
 EXPECTED_ACCOUNT=769413326616        # 팀 계정. 다르면 중단(오배포 방지)
-PRIVATE_SECRET=/project/jwt/private
-PUBLIC_SECRET=/project/jwt/public
+PRIVATE_SECRET=/boa/jwt/private
+PUBLIC_SECRET=/boa/jwt/public
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 

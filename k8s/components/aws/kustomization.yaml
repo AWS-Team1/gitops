@@ -1,9 +1,0 @@
-apiVersion: kustomize.config.k8s.io/v1alpha1
-kind: Component
-# 환경에 무관한 AWS 공통 설정만 둔다.
-# 환경 종속 리소스(SecretProviderClass / Ingress / DB endpoint)는
-# overlays/<env>/aws 에서 bootstrap-eks.sh 가 렌더링한다.
-resources:
-  - networkpolicy.yaml
-components:
-  - db-bootstrap

@@ -1,0 +1,17 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: boa
+  namespace: argocd
+spec:
+  sourceRepos:
+    - https://github.com/AWS-TEAM1-DEV/gitops.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: bank-of-anthos
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

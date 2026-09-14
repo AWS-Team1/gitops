@@ -1,0 +1,26 @@
+# default-deny-all 아래에서도 db-bootstrap Pod 가 RDS 와 DNS 로 나갈 수 있게 한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-bootstrap-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: db-bootstrap
+  policyTypes:
+    - Egress
+  egress:
+    # RDS boa-postgres DB subnet A/C
+    - to:
+        - ipBlock:
+            cidr: 192.168.16.0/24
+        - ipBlock:
+            cidr: 192.168.17.0/24
+      ports:
+        - port: 5432
+          protocol: TCP
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

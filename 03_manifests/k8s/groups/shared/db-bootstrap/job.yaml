@@ -1,0 +1,132 @@
+# db-bootstrap Job.
+#
+# 이 Job 만 RDS master 자격 증명을 쓴다. 하는 일:
+#   1. 최소 권한 역할(bank_app) 생성 및 비밀번호를 /boa/database/app 에 맞춤
+#   2. accounts + ledger 스키마를 단일 DB(boadb)에 적용
+#   3. bank_app 에 DML 권한만 부여 (DDL/소유권 없음)
+#
+# Argo CD Sync hook 으로 돌린다. BeforeHookCreation 으로 매 sync 마다 새로 만들어지고,
+# 내용은 멱등이라 반복 실행이 안전하다. sync-wave -2 이므로 애플리케이션(wave 0)보다 먼저 완료된다.
+#
+# 비밀값은 CSI 로 파일로만 마운트한다. Kubernetes Secret 으로 동기화하지 않고 로그에도 출력하지 않는다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-bootstrap
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-2"
+  labels:
+    app: db-bootstrap
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: db-bootstrap
+    spec:
+      restartPolicy: Never
+      serviceAccountName: bank-of-anthos-db-bootstrap
+      volumes:
+        - name: sql
+          configMap:
+            name: db-bootstrap-sql
+        - name: db-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-db-bootstrap-secrets
+      containers:
+        - name: bootstrap
+          image: postgres:16
+          env:
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: DB_HOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: DB_PORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: DB_NAME
+            - name: PGSSLMODE
+              value: require
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+            - name: db-secrets
+              mountPath: /mnt/db-secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              # 비밀값은 변수로만 다룬다. echo 하지 않는다.
+              PGUSER=$(cat /mnt/db-secrets/master-username)
+              PGPASSWORD=$(cat /mnt/db-secrets/master-password)
+              APP_USER=$(cat /mnt/db-secrets/app-username)
+              APP_PASSWORD=$(cat /mnt/db-secrets/app-password)
+              export PGUSER PGPASSWORD
+
+              psql_admin() { psql -v ON_ERROR_STOP=1 --no-psqlrc -q "$@"; }
+
+              echo "== 1/3 애플리케이션 역할 생성 / 비밀번호 동기화 =="
+              # log_min_duration_statement 를 꺼서 비밀번호가 서버 로그에 남지 않게 한다.
+              psql_admin -v u="$APP_USER" -v p="$APP_PASSWORD" <<'EOSQL'
+              DO $do$ BEGIN
+                BEGIN
+                  EXECUTE 'SET log_min_duration_statement = -1';
+                EXCEPTION WHEN OTHERS THEN NULL;   -- 권한이 없으면 그냥 넘어간다
+                END;
+              END $do$;
+              SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'u', :'p')
+                WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'u')\gexec
+              SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'u', :'p')
+                WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = :'u')\gexec
+              EOSQL
+
+              echo "== 2/3 스키마 적용 (accounts + ledger 를 ${PGDATABASE} 에) =="
+              # accounts 스키마는 CREATE ... IF NOT EXISTS 라 반복 실행이 안전하다.
+              psql_admin -d "$PGDATABASE" -f /sql/0-accounts-schema.sql
+
+              # ledger 스키마는 IF NOT EXISTS 가 없으므로 존재 여부를 먼저 본다.
+              if [ "$(psql_admin -d "$PGDATABASE" -tAc \
+                        "SELECT to_regclass('public.transactions') IS NOT NULL")" != "t" ]; then
+                psql_admin -d "$PGDATABASE" -f /sql/0_init_tables.sql
+              else
+                echo "   ledger 스키마 이미 존재 - 건너뜀"
+              fi
+
+              echo "== 3/3 최소 권한 부여 (DML 만, DDL/소유권 없음) =="
+              psql_admin -v u="$APP_USER" -v db="$PGDATABASE" <<'EOSQL'
+              SELECT format('GRANT CONNECT ON DATABASE %I TO %I', :'db', :'u')\gexec
+              EOSQL
+              psql_admin -d "$PGDATABASE" -v u="$APP_USER" <<'EOSQL'
+              SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'u')\gexec
+              SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'u')\gexec
+              SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'u')\gexec
+              SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', :'u')\gexec
+              SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', :'u')\gexec
+              EOSQL
+
+              echo "== 검증 =="
+              psql_admin -d "$PGDATABASE" -c '\dt'
+              echo "== 완료 =="

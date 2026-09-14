@@ -18,4 +18,4 @@ kubectl -n argocd rollout status deployment/argocd-server --timeout=10m
 # root Application 적용 (App-of-Apps 진입점)
 # ※ private repo면 실제 sync 전에 register-repo.sh로 자격증명부터 등록할 것.
 #    root app은 automated:false라 여기선 객체만 생기고, 수동 sync는 나중에.
-kubectl apply -f 01_bootstrap/root-application.yaml
+kubectl apply -f 01_bootstrap/root-application-eks.yaml
