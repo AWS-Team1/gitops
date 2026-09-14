@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
     targetRevision: dev
-    path: 03_manifests/k8s/groups/ledger
+    path: 03_manifests/eks/ledger
   destination:
     server: https://kubernetes.default.svc
     namespace: bank-of-anthos
