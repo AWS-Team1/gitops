@@ -9,6 +9,7 @@ resources:
   - networkpolicy.yaml
   - secret-sync.yaml
   - db-bootstrap.yaml
+  - hpa.yaml
 
 # db-bootstrap Job 이 마운트하는 스키마 SQL. 같은 kustomization 안이라
 # Job 의 volume.configMap.name 참조가 해시 이름으로 자동 치환된다.

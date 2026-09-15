@@ -57,6 +57,8 @@ spec:
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "$(POSTGRES_PASSWORD)"
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "3"
           volumeMounts:
             - name: secrets-store
               mountPath: /tmp/.ssh
