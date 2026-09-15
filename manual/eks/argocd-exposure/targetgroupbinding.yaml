@@ -1,0 +1,18 @@
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: argocd-server
+spec:
+  serviceRef:
+    name: argocd-server
+    port: http
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-argocd-tg/3175b387efed36ae # HARD-CODED: render-aws-runtime.sh로 갱신
+  targetType: ip
+  networking:
+    ingress:
+      - from:
+          - securityGroup:
+              groupID: sg-0f259904b7c977264 # HARD-CODED: render-aws-runtime.sh로 갱신
+        ports:
+          - protocol: TCP
+            port: 8080

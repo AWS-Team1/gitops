@@ -1,0 +1,129 @@
+---
+# Source: bank-of-anthos/templates/frontend/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      serviceAccountName: bank-of-anthos
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: frontend
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: frontend
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/frontend:sha-ee6d0fe74b6ccd2a55b4ccea479d03c55987b82c
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VERSION
+              value: "1.0"
+            - name: PORT
+              value: "8080"
+            - name: ENABLE_TRACING
+              value: "false"
+            - name: SCHEME
+              value: "http"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: LOCAL_ROUTING_NUM
+              value: "883745000"
+            - name: PUB_KEY_PATH
+              value: /tmp/.ssh/jwtRS256.key.pub
+            - name: USERSERVICE_API_ADDR
+              value: "userservice:8080"
+            - name: CONTACTS_API_ADDR
+              value: "contacts:8080"
+            - name: BALANCES_API_ADDR
+              value: "balancereader:8080"
+            - name: HISTORY_API_ADDR
+              value: "transactionhistory:8080"
+            - name: TRANSACTIONS_API_ADDR
+              value: "ledgerwriter:8080"
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /tmp/.ssh
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 300m
+              memory: 384Mi
+      volumes:
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+spec:
+  selector:
+    app: frontend
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 192.168.2.0/24   # ALB public subnet-a
+        - ipBlock:
+            cidr: 192.168.3.0/24   # ALB public subnet-c
+      ports:
+        - port: 8080
+  egress:
+    - to:                          # frontend는 5개 백엔드 서비스 전부와 통신
+        - podSelector:
+            matchLabels:
+              app: userservice
+        - podSelector:
+            matchLabels:
+              app: contacts
+        - podSelector:
+            matchLabels:
+              app: balancereader
+        - podSelector:
+            matchLabels:
+              app: transactionhistory
+        - podSelector:
+            matchLabels:
+              app: ledgerwriter
+      ports:
+        - port: 8080
+    - ports:                       # default-deny 때문에 DNS egress 필수
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

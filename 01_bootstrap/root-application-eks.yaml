@@ -4,8 +4,9 @@
 # 이후의 모든 것(AppProject, platform controller, workload ApplicationSet)은
 # 이 Application 이 Git 의 argocd/ 경로를 동기화하면서 만들어진다.
 #
-# repoURL / targetRevision 은 scripts/bootstrap-eks.sh 가 렌더링한다.
-# GENERATED FIELDS - do not edit repoURL/targetRevision by hand.
+# HARD-CODED: repoURL/targetRevision은 재사용할 조직·저장소·브랜치에 맞게 바꾼다.
+# 이 테스트 브랜치가 EKS의 desired state다. dev 병합 전에는 targetRevision을
+# 바꾸지 않아 CI의 dev write-back과 CD 검증이 섞이지 않게 한다.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -17,14 +18,22 @@ spec:
   project: default
   source:
     repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
-    targetRevision: dev
+    targetRevision: feat/manual-yaml
     path: 03_manifests/eks/applications
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd
   syncPolicy:
     automated:
-      prune: false
+      prune: true
       selfHeal: true
+      allowEmpty: false
     syncOptions:
       - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
