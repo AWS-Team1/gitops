@@ -187,6 +187,7 @@ kubectl top nodes
 확인한다. 앱 Secret/JWT와 CSI CRD는 이 단계 전에 준비되어 있어야 한다.
 
 ```bash
+kubectl apply -f manual/eks/namespace.yaml
 kubectl apply --dry-run=server -k manual/eks
 kubectl apply -k manual/eks
 kubectl -n bank-of-anthos get deployments,pods,jobs,ingress,hpa
@@ -221,7 +222,7 @@ kubectl -n argocd get applications \
 bash 02_scripts/verify-argocd.sh
 ```
 
-Root 포함 6개 Application이 `Synced/Healthy`이고 revision이 `$BRANCH`의
+Root 포함 5개 Application이 `Synced/Healthy`이고 revision이 `$BRANCH`의
 최신 commit인지 확인한다. 최초 Sync 전에 이미지/Ingress/SecretProviderClass
 ARN 및 prune 대상의 Diff를 읽는다. 기존 수동 리소스를 Argo CD가 인수하며,
 `boa-accounts`, `boa-ledger`,
