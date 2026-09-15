@@ -17,7 +17,7 @@ case "$MODE" in
     bash "$SCRIPT_DIR/install-argocd.sh"
 
     echo "== UI 노출용 TargetGroupBinding 수동 적용 =="
-    kubectl apply -f "$REPO_ROOT/eks/manual/argocd-exposure/targetgroupbinding.yaml"
+    kubectl apply -f "$REPO_ROOT/manual/eks/argocd-exposure/targetgroupbinding.yaml"
 
     echo "준비 완료. docs/ARGOCD_EKS_RUNBOOK.md의 UI 저장소 연결 단계를 수행하세요."
     ;;
