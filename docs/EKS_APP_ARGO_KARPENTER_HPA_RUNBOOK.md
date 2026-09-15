@@ -1,8 +1,13 @@
-# EKS 정리 → 새 Git clone → 앱·Argo CD·Karpenter·HPA 검증
+# EKS 내부 서비스 정리 → 새 Git clone → 앱·Argo CD·Karpenter·HPA 검증
 
-범위는 기존 `boa-eks`의 Kubernetes/Helm 설치물을 정리하고, GitHub에서 새로
-clone한 브랜치로 다시 배포하는 것이다. Terraform `apply`/`destroy`는 실행하지
-않는다. AWS 계정은 `769413326616`, 리전은 `ap-northeast-2`다.
+범위는 기존 `boa-eks` 안의 이 프로젝트 서비스(Kubernetes/Helm 설치물)를
+정리하고, GitHub에서 새로 clone한 브랜치로 다시 배포하는 것이다. EKS 클러스터,
+Managed Node 및 Terraform 소유 인프라는 유지하며 `terraform apply/destroy`는
+실행하지 않는다. AWS 계정은 `769413326616`, 리전은 `ap-northeast-2`다.
+
+다만 앱 Ingress가 만든 ALB와 Karpenter가 만든 NodeClaim/EC2는 서비스에
+종속된 동적 리소스라 서비스 삭제 후 회수 여부를 확인한다. Terraform이 만든
+Argo CD ops ALB나 EKS 기반 인프라는 삭제하지 않는다.
 
 아래 명령은 **code server의 `karfa`처럼 해당 계정·클러스터 권한이 있는 환경**에서
 실행한다. 이 런북은 현재 EKS에 직접 실행된 것이 아니며, 비용이 발생하는 Karpenter
@@ -35,6 +40,10 @@ kubectl get nodes -o wide
 ```bash
 CURRENT_GITOPS=/absolute/path/to/current/gitops
 test -f "$CURRENT_GITOPS/02_scripts/teardown-cluster.sh"
+grep -q 'APP_INGRESS' "$CURRENT_GITOPS/02_scripts/teardown-cluster.sh" || {
+  echo '옛 정리 스크립트입니다. feat/manual의 스크립트를 먼저 가져오세요.' >&2
+  exit 1
+}
 cd "$CURRENT_GITOPS"
 helm list -A
 kubectl -n argocd get applications
@@ -63,8 +72,9 @@ bash 02_scripts/teardown-cluster.sh --confirm
 ```
 
 이 스크립트는 AWS 계정/EKS endpoint를 확인하고 Argo CD 자동 재생성을 멈춘 뒤
-Ingress와 LBC가 만든 클러스터 ALB가 사라질 때까지 기다린다. 실패하면 다음
-삭제나 Terraform destroy로 진행하지 않는다. 이후 HPA·앱·Argo CD를 제거한다.
+`bank-of-anthos/boa-ingress`와 그 Ingress가 만든 앱 ALB만 정리한다. Terraform
+소유 ops ALB는 기다리거나 삭제하지 않는다. 실패하면 다음 삭제로 진행하지 않는다.
+이후 HPA·앱·Argo CD를 제거한다.
 
 ```bash
 kubectl -n bank-of-anthos delete hpa \
@@ -75,7 +85,9 @@ kubectl delete ec2nodeclass default --ignore-not-found
 helm uninstall karpenter -n karpenter                 # release가 있을 때만
 kubectl delete namespace karpenter --ignore-not-found
 
-kubectl -n argocd delete applications --all --ignore-not-found
+kubectl -n argocd delete applications \
+  boa-eks-root boa-shared boa-accounts boa-ledger boa-frontend boa-argocd-exposure \
+  --ignore-not-found
 kubectl delete namespace bank-of-anthos --ignore-not-found
 kubectl -n argocd delete targetgroupbinding argocd-server --ignore-not-found
 helm uninstall argocd -n argocd                       # release가 있을 때만
@@ -95,8 +107,7 @@ kubectl get nodes -o wide                              # 기존 Managed Node는 
 ```
 
 Terraform이 관리하는 EKS/VPC/RDS/IAM/Pod Identity, Secrets Manager 및
-`argocd-exposure/`의 AWS ops ALB는 이 런북에서 삭제하지 않는다. Terraform destroy는
-별도 검토가 필요하다.
+`argocd-exposure/`의 AWS ops ALB는 이 런북에서 삭제하지 않는다.
 
 ## 2. GitHub에서 새 clone하고 브랜치 pull
 
