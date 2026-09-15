@@ -19,7 +19,6 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 ├── install-argocd.sh
 ├── prepare-database-secret.sh
 ├── prepare-jwt.sh
-├── render-aws-runtime.sh
 ├── verify-argocd.sh
 └── teardown-cluster.sh
 03_manifests/

@@ -118,11 +118,14 @@ terraform -chdir=aws-cd-bootstrap output
 
 ## 5. AWS 런타임 값을 GitOps에 반영
 
-ALB/SG/RDS를 재생성하면 ARN과 ID가 바뀐다. 스크립트로 매니페스트를 갱신한다.
+ALB/SG/RDS를 재생성하면 ARN과 ID가 바뀐다. 아래 두 매니페스트의 값을 수동으로 갱신한다.
 
 ```bash
-cd ~/work-dir/gitops
-bash 02_scripts/render-aws-runtime.sh --infra-root ~/work-dir/Infra
+# manual/eks/argocd-exposure/targetgroupbinding.yaml
+#   targetGroupARN: 새 Target Group ARN
+#   spec.networking.ingress[].from[].securityGroup.groupID: 새 ALB Security Group ID
+# 03_manifests/eks/shared/secrets.yaml
+#   db-bootstrap SecretProviderClass의 objectName: 새 RDS master secret ARN
 
 git diff --check
 kubectl kustomize 03_manifests/eks >/dev/null
@@ -271,7 +274,7 @@ kubectl -n argocd get targetgroupbinding argocd-server
 kubectl -n kube-system logs deployment/aws-load-balancer-controller --tail=100
 ```
 
-`render-aws-runtime.sh`를 다시 실행해 Target Group ARN과 ALB SG ID를 확인한다.
+Target Group ARN과 ALB SG ID가 현재 `aws-ops` 값과 일치하는지 확인한다.
 
 ### 변경 후 `OutOfSync`가 유지됨
 

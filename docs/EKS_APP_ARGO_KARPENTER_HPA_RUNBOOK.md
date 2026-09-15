@@ -148,9 +148,8 @@ kubectl kustomize 03_manifests/eks/applications >/dev/null
 ## 3. AWS 런타임 값과 Secret 준비
 
 Terraform을 적용하지는 않지만, 이미 만든 AWS 리소스의 ARN/ID가 Git 선언과
-일치해야 한다. 다른 `Infra` checkout이 있으면 기존
-`docs/ARGOCD_EKS_RUNBOOK.md` 5장에 따라 `render-aws-runtime.sh`로 갱신하고,
-diff를 검토해 해당 브랜치에 commit/push한다.
+일치해야 한다. ALB/SG/RDS를 재생성했다면 `docs/ARGOCD_EKS_RUNBOOK.md` 5장의
+수동 갱신 목록을 반영하고, diff를 검토해 해당 브랜치에 commit/push한다.
 
 ```bash
 git diff --check
