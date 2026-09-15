@@ -3,10 +3,10 @@
 EKS용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
 AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terraform이 소유합니다.
 
-재현 가능한 전체 설치 절차와 `HARD-CODED` 교체 목록은
-[`docs/ARGOCD_EKS_RUNBOOK.md`](docs/ARGOCD_EKS_RUNBOOK.md)를 따릅니다.
-Terraform 적용을 제외한 앱 수동 시험 → Argo CD 인수 → Karpenter/HPA 검증 및 삭제는
+현재 브랜치의 설치·검증·삭제 순서는
 [`docs/EKS_APP_ARGO_KARPENTER_HPA_RUNBOOK.md`](docs/EKS_APP_ARGO_KARPENTER_HPA_RUNBOOK.md)를 따릅니다.
+기존 `jiho-test-cd` 기준 AWS 값 교체·저장소 연결 상세는
+[`docs/ARGOCD_EKS_RUNBOOK.md`](docs/ARGOCD_EKS_RUNBOOK.md)를 참고합니다.
 
 ## 구조
 
@@ -27,7 +27,7 @@ Terraform 적용을 제외한 앱 수동 시험 → Argo CD 인수 → Karpenter
     ├── kustomization.yaml       # 전체 리소스 렌더링/검증용
     ├── argocd-exposure/         # ops ALB TargetGroupBinding
     ├── applications/            # AppProject + child Applications
-    ├── shared/                  # Namespace, SA, secrets, DB bootstrap
+    ├── shared/                  # Namespace, SA, secrets, DB bootstrap, HPA
     ├── accounts/                # userservice, contacts
     ├── ledger/                  # balancereader, ledgerwriter, transactionhistory
     └── frontend/                # frontend, ALB Ingress

@@ -10,7 +10,7 @@ spec:
   # HARD-CODED: 재사용할 GitHub 조직/저장소/브랜치에 맞게 변경한다.
   source:
     repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
-    targetRevision: jiho-test-cd
+    targetRevision: feat/manual
     path: 03_manifests/eks/frontend
   destination:
     server: https://kubernetes.default.svc

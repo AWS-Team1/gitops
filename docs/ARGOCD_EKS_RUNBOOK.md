@@ -1,5 +1,8 @@
 # EKS Argo CD 재현 런북 (`jiho-test-cd`)
 
+이 문서는 기존 `jiho-test-cd` 브랜치 기록이다. `feat/manual`의 앱/HPA·수동
+Karpenter 설치와 삭제는 [통합 런북](EKS_APP_ARGO_KARPENTER_HPA_RUNBOOK.md)을 따른다.
+
 이 문서는 새 작업자가 `AWS-TEAM1-DEV/Infra`와 `AWS-TEAM1-DEV/gitops`의
 `jiho-test-cd` 브랜치만 checkout한 뒤, 터미널과 Argo CD UI에서 같은 배포를
 재현하기 위한 절차다. 명령은 code server의 `karfa` 또는 동등한 AWS 권한을 가진

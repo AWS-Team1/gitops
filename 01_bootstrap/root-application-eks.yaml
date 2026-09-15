@@ -18,7 +18,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
-    targetRevision: jiho-test-cd
+    targetRevision: feat/manual
     path: 03_manifests/eks/applications
   destination:
     server: https://kubernetes.default.svc

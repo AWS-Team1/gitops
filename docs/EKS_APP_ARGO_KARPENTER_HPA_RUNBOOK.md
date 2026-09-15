@@ -100,12 +100,10 @@ Terraform이 관리하는 EKS/VPC/RDS/IAM/Pod Identity, Secrets Manager 및
 
 ## 2. GitHub에서 새 clone하고 브랜치 pull
 
-**지금 로컬 변경은 GitHub에 게시되기 전까지 새 clone에 나타나지 않는다.**
-이 정리·런북·`manual/karpenter/` 파일을 사용할 브랜치에 먼저
-commit/push 또는 병합한 뒤 새 설치를 시작한다.
+이 정리·런북·`manual/karpenter/` 및 HPA 파일이 올라간 브랜치를 clone한다.
 
 ```bash
-BRANCH=jiho-test-cd                 # 다음 시험에서 다른 브랜치를 쓰면 여기만 먼저 변경
+BRANCH=feat/manual                 # 다음 시험에서 다른 브랜치를 쓰면 여기만 먼저 변경
 mkdir -p ~/work-dir
 cd ~/work-dir
 git clone --branch "$BRANCH" \
@@ -120,7 +118,7 @@ git rev-parse HEAD
 디렉터리 이름을 지정하고 새로 clone한다.
 
 Root와 모든 Child Application의 Git `targetRevision`이 `$BRANCH`와 일치해야
-Argo CD가 방금 clone한 브랜치를 읽는다. 현재 파일은 `jiho-test-cd`를 가리킨다.
+Argo CD가 방금 clone한 브랜치를 읽는다. 현재 파일은 `feat/manual`을 가리킨다.
 
 ```bash
 grep -R 'targetRevision:' \
@@ -172,26 +170,16 @@ kubectl top nodes
 
 기존 YAML/다른 Helm release 소유 Metrics Server를 중복 설치하지 않는다.
 
-## 5. 앱 YAML 수동 smoke test → Argo CD 인수
+## 5. 앱 YAML 검증 → Argo CD가 처음부터 관리
 
-이 단계는 **새로 비운 클러스터에서만** 실행한다. 이미 Root/Child Application이
-있으면 앱 수동 적용을 건너뛴다. Argo CD 설치 전 앱 Secret/JWT와 CSI CRD가
-준비되어 있어야 한다.
+앱과 HPA YAML은 서버 dry-run으로 검사하되 직접 설치하지 않는다. 앱 Secret/JWT와
+CSI CRD는 Argo CD 설치 전에 준비되어 있어야 한다.
 
 ```bash
-test -z "$(kubectl -n argocd get applications -o name 2>/dev/null)" || {
-  echo 'Argo CD 앱이 이미 존재합니다. 수동 앱 적용을 건너뛰세요.' >&2
-  exit 1
-}
 kubectl apply --dry-run=server -k 03_manifests/eks
-kubectl apply -k 03_manifests/eks
-kubectl -n bank-of-anthos get deployments,pods,jobs,ingress
-kubectl -n bank-of-anthos wait --for=condition=complete job/db-bootstrap --timeout=10m
-kubectl -n bank-of-anthos rollout status deployment/frontend --timeout=10m
 ```
 
-Ingress가 ALB를 생성할 수 있다. 수동 시험이 끝나면 같은 앱에 다시
-`kubectl apply -k`하지 않는다. Argo CD가 이후 Git desired state를 인수한다.
+실제 앱/Ingress/HPA 설치는 아래 Root Application을 Sync하면서 시작한다.
 
 ```bash
 bash 02_scripts/install-argocd.sh          # Helm chart 10.4.0
@@ -206,6 +194,9 @@ Project는 비우고 연결 결과 `Successful`을 확인한다. PAT는 Git에 �
 
 ```bash
 bash 02_scripts/bootstrap.sh apply-root
+kubectl -n bank-of-anthos wait --for=condition=complete job/db-bootstrap --timeout=10m
+kubectl -n bank-of-anthos rollout status deployment/frontend --timeout=10m
+kubectl -n bank-of-anthos get deployments,pods,jobs,ingress
 kubectl -n argocd get applications \
   -o custom-columns=NAME:.metadata.name,SYNC:.status.sync.status,HEALTH:.status.health.status,REVISION:.status.sync.revision
 bash 02_scripts/verify-argocd.sh
@@ -257,23 +248,26 @@ kubectl wait --for=condition=Ready nodepool/default --timeout=5m
 kubectl get ec2nodeclass,nodepool,nodeclaim
 ```
 
-## 7. HPA YAML 도착 시 바로 Argo CD 관리
+## 7. HPA를 Argo CD로 검증
 
-현재 HPA 시험본은 아직 전달되지 않아 이 런북에서 임의 YAML을 적용하지 않는다.
-6개 HPA YAML을 받으면 `scaleTargetRef`, `minReplicas`, `maxReplicas`,
-CPU request/metric을 검증하고 앱별로 분리한다.
+`feat/hpa-metrics`의 HPA 커밋을 이 브랜치에 cherry-pick했다. 6개 HPA는
+`03_manifests/eks/shared/hpa.yaml`에 있고 `boa-shared` Application이 관리한다.
+모두 CPU 목표 70%, 최소 2개/최대 3개 Pod다. Ledger 3개 Deployment의
+HikariCP 최대 연결 풀은 3으로 제한했고, Deployment의 `spec.replicas`는
+Git에서 지정하지 않는다. Argo CD는 앱 Deployment의 replicas 차이를 무시한다.
+**HPA는 별도로 `kubectl apply`하지 않는다.**
 
-- `accounts/`: contacts, userservice HPA
-- `ledger/`: balancereader, ledgerwriter, transactionhistory HPA
-- `frontend/`: frontend HPA
+```bash
+kubectl kustomize 03_manifests/eks/shared >/dev/null
+kubectl -n bank-of-anthos get hpa -o wide
+kubectl -n argocd get applications boa-shared boa-accounts boa-frontend boa-ledger
+kubectl -n bank-of-anthos describe hpa frontend-hpa userservice-hpa contacts-hpa \
+  ledgerwriter-hpa balancereader-hpa transactionhistory-hpa
+```
 
-각 앱 디렉터리의 `kustomization.yaml`에 새 HPA 파일을 `resources`로 추가한다.
-`kubectl kustomize`와 `kubectl apply --dry-run=server -f`로 검증한 뒤
-`$BRANCH`에 commit/push한다. **HPA를 별도 수동 `kubectl apply`로 설치하지
-않는다.** Argo CD Child Application이 자동 Sync로 HPA를 처음부터 소유한다.
-HPA가 `kubectl -n bank-of-anthos get hpa -o wide`에서 6개로 보이고
-`ScalingActive=True`인지 확인한다. `minReplicas: 2`라면 1개로 줄지 않는 것이
-정상이며 [Kubernetes HPA](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)의
+HPA 6개가 보이고 `ScalingActive=True`, CPU TARGETS가 `<unknown>`이 아닌지
+확인한다. `minReplicas: 2`라서 1개로 줄지 않는 것이 정상이며
+[Kubernetes HPA](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/)의
 기본 downscale 안정화 창도 고려한다.
 
 ## 8. Karpenter scale-out / scale-in 시험
