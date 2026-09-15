@@ -6,13 +6,13 @@ spec:
   serviceRef:
     name: argocd-server
     port: http
-  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-argocd-tg/51c904648f048f63 # HARD-CODED: render-aws-runtime.sh로 갱신
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-argocd-tg/3175b387efed36ae # HARD-CODED: render-aws-runtime.sh로 갱신
   targetType: ip
   networking:
     ingress:
       - from:
           - securityGroup:
-              groupID: sg-0c2e72aca8b61a69f # HARD-CODED: render-aws-runtime.sh로 갱신
+              groupID: sg-0f259904b7c977264 # HARD-CODED: render-aws-runtime.sh로 갱신
         ports:
           - protocol: TCP
             port: 8080

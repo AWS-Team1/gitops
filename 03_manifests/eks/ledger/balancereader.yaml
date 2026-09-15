@@ -24,7 +24,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: balancereader
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-balancereader:sha-2edda036ce4ce0b4e501660ed7f2be2defd8a59a
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/balancereader:sha-ce6d9485b1c4c352bb6a033c8fb531f784545cd9
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
