@@ -195,7 +195,8 @@ kubectl -n bank-of-anthos rollout status deployment/frontend --timeout=10m
 ```
 
 서비스와 HPA가 정상 동작하는 것을 확인한 뒤 Argo CD를 설치한다. 수동 설치는
-`manual/apps`를 사용하고 Argo CD는 `03_manifests/eks`를 source로 읽는다. 아래 명령은
+`manual/apps`의 독립 YAML을 사용하고 Argo CD는 `03_manifests/eks`의 독립 YAML을
+source로 읽는다. 두 폴더의 앱 설정은 동일하게 유지해야 한다. 아래 명령은
 Argo CD 자체와 UI 노출만 설치하며 앱을 다시 `kubectl apply`하지 않는다.
 
 ```bash

@@ -32,7 +32,7 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
     ├── ledger/                  # balancereader, ledgerwriter, transactionhistory
     └── frontend/                # frontend, ALB Ingress
 manual/
-├── apps/                      # 최초 서비스/HPA 수동 배포용 진입점
+├── apps/                      # 최초 서비스/HPA 수동 배포용 전체 YAML
 └── karpenter/                 # 수동 배포용 EC2NodeClass, NodePool
 ```
 
