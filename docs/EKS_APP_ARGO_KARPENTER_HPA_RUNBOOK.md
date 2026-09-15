@@ -111,7 +111,7 @@ Terraform이 관리하는 EKS/VPC/RDS/IAM/Pod Identity, Secrets Manager 및
 
 ## 2. GitHub에서 새 clone하고 브랜치 pull
 
-이 정리·런북·`manual/karpenter/` 및 HPA 파일이 올라간 브랜치를 clone한다.
+이 정리·런북·`eks/manual/karpenter/` 및 HPA 파일이 올라간 브랜치를 clone한다.
 
 ```bash
 BRANCH=feat/manual-yaml            # 다음 시험에서 다른 브랜치를 쓰면 여기만 먼저 변경
@@ -135,8 +135,8 @@ Argo CD가 방금 clone한 브랜치를 읽는다. 현재 파일은 `feat/manual
 grep -R 'targetRevision:' \
   01_bootstrap/root-application-eks.yaml \
   03_manifests/eks/applications
-test -f manual/karpenter/ec2nodeclass.yaml
-test -f manual/karpenter/nodepool.yaml
+test -f eks/manual/karpenter/ec2nodeclass.yaml
+test -f eks/manual/karpenter/nodepool.yaml
 kubectl kustomize 03_manifests/eks >/dev/null
 kubectl kustomize 03_manifests/eks/applications >/dev/null
 ```
@@ -187,26 +187,26 @@ kubectl top nodes
 확인한다. 앱 Secret/JWT와 CSI CRD는 이 단계 전에 준비되어 있어야 한다.
 
 ```bash
-kubectl apply --dry-run=server -k manual/apps
-kubectl apply -k manual/apps
+kubectl apply --dry-run=server -k eks/manual/apps
+kubectl apply -k eks/manual/apps
 kubectl -n bank-of-anthos get deployments,pods,jobs,ingress,hpa
 kubectl -n bank-of-anthos wait --for=condition=complete job/db-bootstrap --timeout=10m
 kubectl -n bank-of-anthos rollout status deployment/frontend --timeout=10m
 ```
 
 서비스와 HPA가 정상 동작하는 것을 확인한 뒤 Argo CD를 설치한다. 수동 설치는
-`manual/apps`의 독립 YAML을 사용하고 Argo CD는 `03_manifests/eks`의 독립 YAML을
+`eks/manual/apps`의 독립 YAML을 사용하고 Argo CD는 `03_manifests/eks`의 독립 YAML을
 source로 읽는다. 두 폴더의 앱 설정은 동일하게 유지해야 한다. 아래 명령은
 Argo CD 자체와 UI 노출만 설치하며 앱을 다시 `kubectl apply`하지 않는다.
 
 ```bash
 bash 02_scripts/install-argocd.sh          # Helm chart 10.4.0
-kubectl apply -f manual/argocd-exposure/targetgroupbinding.yaml
+kubectl apply -f eks/manual/argocd-exposure/targetgroupbinding.yaml
 kubectl -n argocd get pods,targetgroupbinding
 ```
 
 `03_manifests/eks/argocd/`와 `03_manifests/eks/argocd-exposure/`의 예전 경로는
-사용하지 않는다. UI TargetGroupBinding은 `manual/argocd-exposure/`에서 수동 관리한다.
+사용하지 않는다. UI TargetGroupBinding은 `eks/manual/argocd-exposure/`에서 수동 관리한다.
 기존 `docs/ARGOCD_EKS_RUNBOOK.md` 7~8장처럼 Argo CD UI에서 private
 `https://github.com/AWS-TEAM1-DEV/gitops.git` 저장소를 연결한다.
 Project는 비우고 연결 결과 `Successful`을 확인한다. PAT는 Git에 넣지 않는다.
@@ -259,11 +259,11 @@ helm upgrade --install karpenter oci://public.ecr.aws/karpenter/karpenter \
 kubectl -n karpenter rollout status deployment/karpenter --timeout=10m
 kubectl get crd nodepools.karpenter.sh nodeclaims.karpenter.sh \
   ec2nodeclasses.karpenter.k8s.aws
-kubectl apply --dry-run=server -f manual/karpenter/ec2nodeclass.yaml
-kubectl apply -f manual/karpenter/ec2nodeclass.yaml
+kubectl apply --dry-run=server -f eks/manual/karpenter/ec2nodeclass.yaml
+kubectl apply -f eks/manual/karpenter/ec2nodeclass.yaml
 kubectl wait --for=condition=Ready ec2nodeclass/default --timeout=5m
-kubectl apply --dry-run=server -f manual/karpenter/nodepool.yaml
-kubectl apply -f manual/karpenter/nodepool.yaml
+kubectl apply --dry-run=server -f eks/manual/karpenter/nodepool.yaml
+kubectl apply -f eks/manual/karpenter/nodepool.yaml
 kubectl wait --for=condition=Ready nodepool/default --timeout=5m
 kubectl get ec2nodeclass,nodepool,nodeclaim
 ```
@@ -317,3 +317,4 @@ kubectl get nodeclaims,nodes -w
 
 HPA가 앱 Pod를 줄여도 Karpenter Node에 다른 Pod가 남으면 `WhenEmpty`에서는
 그 Node가 회수되지 않는다. 다음 반복 실험을 위한 삭제는 다시 **1장**을 따른다.
+

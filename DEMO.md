@@ -23,6 +23,7 @@ Karpenter 수동 설치 → scale-out/in 시험은
 통합 런북 3~8장을 따릅니다. 새 브랜치를 쓰면 Root/Child Application의
 `targetRevision`도 그 브랜치로 맞춘 뒤 원격에 게시합니다.
 
-`manual/argocd-exposure/`는 UI 노출용 수동 리소스입니다. 앱 전체에
+`eks/manual/argocd-exposure/`는 UI 노출용 수동 리소스입니다. 앱 전체에
 `kubectl apply -k 03_manifests/eks`를 실행하지 마세요.
-최초 서비스 수동 배포가 필요하면 `kubectl apply -k manual/apps`를 사용합니다.
+최초 서비스 수동 배포가 필요하면 `kubectl apply -k eks/manual/apps`를 사용합니다.
+

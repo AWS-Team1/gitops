@@ -31,9 +31,9 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
     ├── accounts/                # userservice, contacts
     ├── ledger/                  # balancereader, ledgerwriter, transactionhistory
     └── frontend/                # frontend, ALB Ingress
-manual/
+eks/manual/
 ├── apps/                      # 최초 서비스/HPA 수동 배포용 전체 YAML
-├── argocd-exposure/            # Argo CD UI ALB 연결 수동 YAML
+├── argocd-exposure/           # Argo CD UI ALB 연결 수동 YAML
 └── karpenter/                 # 수동 배포용 EC2NodeClass, NodePool
 ```
 
@@ -45,7 +45,7 @@ bash 02_scripts/prepare-database-secret.sh
 bash 02_scripts/prepare-jwt.sh
 
 # 2. 서비스와 HPA 수동 배포·검증 (Argo CD source와 분리)
-kubectl apply -k manual/apps
+kubectl apply -k eks/manual/apps
 
 # 3. Argo CD 설치 후 런북대로 저장소 연결·Root 적용
 bash 02_scripts/install-argocd.sh
@@ -60,7 +60,8 @@ Root Application은 `applications/`를 읽고, child Application이 `shared`,
 
 ```bash
 kubectl kustomize 03_manifests/eks
-kubectl apply --dry-run=server -f manual/argocd-exposure/targetgroupbinding.yaml
+kubectl apply --dry-run=server -f eks/manual/argocd-exposure/targetgroupbinding.yaml
 kubectl kustomize 03_manifests/eks/applications
 kubectl -n argocd get applications
 ```
+
