@@ -21,7 +21,7 @@ done
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
 CD_ROOT="$INFRA_ROOT/aws-cd-bootstrap"
-TGB_FILE="$REPO_ROOT/03_manifests/eks/argocd-exposure/targetgroupbinding.yaml"
+TGB_FILE="$REPO_ROOT/manual/argocd-exposure/targetgroupbinding.yaml"
 SECRETS_FILE="$REPO_ROOT/03_manifests/eks/shared/secrets.yaml"
 
 [[ -d "$CD_ROOT" ]] || { echo "ERROR: $CD_ROOT 없음" >&2; exit 1; }

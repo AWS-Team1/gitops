@@ -16,8 +16,8 @@ case "$MODE" in
     echo "== Argo CD 설치 =="
     bash "$SCRIPT_DIR/install-argocd.sh"
 
-    echo "== UI 노출용 TargetGroupBinding bootstrap =="
-    kubectl apply -k "$REPO_ROOT/03_manifests/eks/argocd-exposure"
+    echo "== UI 노출용 TargetGroupBinding 수동 적용 =="
+    kubectl apply -f "$REPO_ROOT/manual/argocd-exposure/targetgroupbinding.yaml"
 
     echo "준비 완료. docs/ARGOCD_EKS_RUNBOOK.md의 UI 저장소 연결 단계를 수행하세요."
     ;;

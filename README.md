@@ -33,6 +33,7 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
     └── frontend/                # frontend, ALB Ingress
 manual/
 ├── apps/                      # 최초 서비스/HPA 수동 배포용 전체 YAML
+├── argocd-exposure/            # Argo CD UI ALB 연결 수동 YAML
 └── karpenter/                 # 수동 배포용 EC2NodeClass, NodePool
 ```
 
@@ -59,7 +60,7 @@ Root Application은 `applications/`를 읽고, child Application이 `shared`,
 
 ```bash
 kubectl kustomize 03_manifests/eks
-kubectl kustomize 03_manifests/eks/argocd-exposure
+kubectl apply --dry-run=server -f manual/argocd-exposure/targetgroupbinding.yaml
 kubectl kustomize 03_manifests/eks/applications
 kubectl -n argocd get applications
 ```

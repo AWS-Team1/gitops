@@ -86,7 +86,7 @@ helm uninstall karpenter -n karpenter                 # release가 있을 때만
 kubectl delete namespace karpenter --ignore-not-found
 
 kubectl -n argocd delete applications \
-  boa-eks-root boa-shared boa-accounts boa-ledger boa-frontend boa-argocd-exposure \
+  boa-eks-root boa-shared boa-accounts boa-ledger boa-frontend \
   --ignore-not-found
 kubectl delete namespace bank-of-anthos --ignore-not-found
 kubectl -n argocd delete targetgroupbinding argocd-server --ignore-not-found
@@ -114,7 +114,7 @@ Terraform이 관리하는 EKS/VPC/RDS/IAM/Pod Identity, Secrets Manager 및
 이 정리·런북·`manual/karpenter/` 및 HPA 파일이 올라간 브랜치를 clone한다.
 
 ```bash
-BRANCH=feat/manual                 # 다음 시험에서 다른 브랜치를 쓰면 여기만 먼저 변경
+BRANCH=feat/manual-yaml            # 다음 시험에서 다른 브랜치를 쓰면 여기만 먼저 변경
 mkdir -p ~/work-dir
 cd ~/work-dir
 git clone --branch "$BRANCH" \
@@ -129,7 +129,7 @@ git rev-parse HEAD
 디렉터리 이름을 지정하고 새로 clone한다.
 
 Root와 모든 Child Application의 Git `targetRevision`이 `$BRANCH`와 일치해야
-Argo CD가 방금 clone한 브랜치를 읽는다. 현재 파일은 `feat/manual`을 가리킨다.
+Argo CD가 방금 clone한 브랜치를 읽는다. 현재 파일은 `feat/manual-yaml`을 가리킨다.
 
 ```bash
 grep -R 'targetRevision:' \
@@ -201,11 +201,12 @@ Argo CD 자체와 UI 노출만 설치하며 앱을 다시 `kubectl apply`하지 
 
 ```bash
 bash 02_scripts/install-argocd.sh          # Helm chart 10.4.0
-kubectl apply -k 03_manifests/eks/argocd-exposure
+kubectl apply -f manual/argocd-exposure/targetgroupbinding.yaml
 kubectl -n argocd get pods,targetgroupbinding
 ```
 
-`03_manifests/eks/argocd/`의 예전 수동 설치 YAML은 사용하지 않는다.
+`03_manifests/eks/argocd/`와 `03_manifests/eks/argocd-exposure/`의 예전 경로는
+사용하지 않는다. UI TargetGroupBinding은 `manual/argocd-exposure/`에서 수동 관리한다.
 기존 `docs/ARGOCD_EKS_RUNBOOK.md` 7~8장처럼 Argo CD UI에서 private
 `https://github.com/AWS-TEAM1-DEV/gitops.git` 저장소를 연결한다.
 Project는 비우고 연결 결과 `Successful`을 확인한다. PAT는 Git에 넣지 않는다.
