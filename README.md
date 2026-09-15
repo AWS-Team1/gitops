@@ -5,6 +5,8 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 
 재현 가능한 전체 설치 절차와 `HARD-CODED` 교체 목록은
 [`docs/ARGOCD_EKS_RUNBOOK.md`](docs/ARGOCD_EKS_RUNBOOK.md)를 따릅니다.
+Terraform 적용을 제외한 앱 수동 시험 → Argo CD 인수 → Karpenter/HPA 검증 및 삭제는
+[`docs/EKS_APP_ARGO_KARPENTER_HPA_RUNBOOK.md`](docs/EKS_APP_ARGO_KARPENTER_HPA_RUNBOOK.md)를 따릅니다.
 
 ## 구조
 
@@ -18,7 +20,6 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 ├── prepare-database-secret.sh
 ├── prepare-jwt.sh
 ├── render-aws-runtime.sh
-├── register-repo.sh
 ├── verify-argocd.sh
 └── teardown-cluster.sh
 03_manifests/
@@ -30,6 +31,8 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
     ├── accounts/                # userservice, contacts
     ├── ledger/                  # balancereader, ledgerwriter, transactionhistory
     └── frontend/                # frontend, ALB Ingress
+manual/
+└── karpenter/                 # 수동 배포용 EC2NodeClass, NodePool
 ```
 
 ## 배포 흐름
