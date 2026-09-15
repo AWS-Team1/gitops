@@ -32,6 +32,7 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
     ├── ledger/                  # balancereader, ledgerwriter, transactionhistory
     └── frontend/                # frontend, ALB Ingress
 manual/
+├── apps/                      # 최초 서비스/HPA 수동 배포용 진입점
 └── karpenter/                 # 수동 배포용 EC2NodeClass, NodePool
 ```
 
@@ -42,8 +43,8 @@ manual/
 bash 02_scripts/prepare-database-secret.sh
 bash 02_scripts/prepare-jwt.sh
 
-# 2. 서비스와 HPA 수동 배포·검증
-kubectl apply -k 03_manifests/eks
+# 2. 서비스와 HPA 수동 배포·검증 (Argo CD source와 분리)
+kubectl apply -k manual/apps
 
 # 3. Argo CD 설치 후 런북대로 저장소 연결·Root 적용
 bash 02_scripts/install-argocd.sh

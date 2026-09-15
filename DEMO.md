@@ -25,3 +25,4 @@ Karpenter 수동 설치 → scale-out/in 시험은
 
 `argocd-exposure/`는 UI 노출에 계속 사용합니다. 앱 전체에
 `kubectl apply -k 03_manifests/eks`를 실행하지 마세요.
+최초 서비스 수동 배포가 필요하면 `kubectl apply -k manual/apps`를 사용합니다.

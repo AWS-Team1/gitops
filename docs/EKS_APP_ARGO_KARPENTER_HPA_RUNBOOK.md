@@ -187,14 +187,15 @@ kubectl top nodes
 확인한다. 앱 Secret/JWT와 CSI CRD는 이 단계 전에 준비되어 있어야 한다.
 
 ```bash
-kubectl apply --dry-run=server -k 03_manifests/eks
-kubectl apply -k 03_manifests/eks
+kubectl apply --dry-run=server -k manual/apps
+kubectl apply -k manual/apps
 kubectl -n bank-of-anthos get deployments,pods,jobs,ingress,hpa
 kubectl -n bank-of-anthos wait --for=condition=complete job/db-bootstrap --timeout=10m
 kubectl -n bank-of-anthos rollout status deployment/frontend --timeout=10m
 ```
 
-서비스와 HPA가 정상 동작하는 것을 확인한 뒤 Argo CD를 설치한다. 아래 명령은
+서비스와 HPA가 정상 동작하는 것을 확인한 뒤 Argo CD를 설치한다. 수동 설치는
+`manual/apps`를 사용하고 Argo CD는 `03_manifests/eks`를 source로 읽는다. 아래 명령은
 Argo CD 자체와 UI 노출만 설치하며 앱을 다시 `kubectl apply`하지 않는다.
 
 ```bash
