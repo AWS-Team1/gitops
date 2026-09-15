@@ -46,15 +46,15 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
+                  name: accounts-db-secret
                   key: username
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
+                  name: accounts-db-secret
                   key: password
             - name: ACCOUNTS_DB_URI
-              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/boadb"
+              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/accountsdb"
           volumeMounts:
             - name: secrets-store
               mountPath: /tmp/.ssh
@@ -72,7 +72,7 @@ spec:
             driver: secrets-store.csi.k8s.io
             readOnly: true
             volumeAttributes:
-              secretProviderClass: bank-of-anthos-secrets
+              secretProviderClass: bank-of-anthos-accounts-secrets
 ---
 # Source: bank-of-anthos/templates/userservice/service.yaml
 apiVersion: v1

@@ -7,8 +7,8 @@ export AWS_PAGER=""
 # HARD-CODED: 다른 계정/리전/Secret 이름에서는 모두 변경한다.
 EXPECTED_ACCOUNT=769413326616
 REGION=ap-northeast-2
-SECRET_NAME=/boa/database/app
-DB_USERNAME=bank_app
+SECRET_NAME="${SECRET_NAME:-/boa/database/app}"
+DB_USERNAME="${DB_USERNAME:-bank_app}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 for tool in aws openssl jq; do

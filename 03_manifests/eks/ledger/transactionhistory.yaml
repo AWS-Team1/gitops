@@ -48,15 +48,15 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
+                  name: ledger-db-secret
                   key: username
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
+                  name: ledger-db-secret
                   key: password
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://db.boa.internal:5432/boadb"
+              value: "jdbc:postgresql://db.boa.internal:5432/ledgerdb"
             - name: SPRING_DATASOURCE_USERNAME
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
@@ -80,7 +80,7 @@ spec:
             driver: secrets-store.csi.k8s.io
             readOnly: true
             volumeAttributes:
-              secretProviderClass: bank-of-anthos-secrets
+              secretProviderClass: bank-of-anthos-ledger-secrets
 ---
 # Source: bank-of-anthos/templates/transactionhistory/service.yaml
 apiVersion: v1
