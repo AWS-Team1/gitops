@@ -17,7 +17,8 @@ cd gitops
 git pull --ff-only origin "$BRANCH"
 ```
 
-이후 Secret 준비 → 앱/HPA YAML dry-run → Argo CD Helm 설치 및 앱/HPA Sync →
+이후 Secret 준비 → 앱/HPA YAML 수동 배포 및 검증 → Argo CD Helm 설치 및 기존
+앱/HPA 인수 →
 Karpenter 수동 설치 → scale-out/in 시험은
 통합 런북 3~8장을 따릅니다. 새 브랜치를 쓰면 Root/Child Application의
 `targetRevision`도 그 브랜치로 맞춘 뒤 원격에 게시합니다.

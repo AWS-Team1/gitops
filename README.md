@@ -38,10 +38,15 @@ manual/
 ## 배포 흐름
 
 ```bash
-# 1. Secret 값, Argo CD, UI 노출 준비
-bash 02_scripts/bootstrap.sh prepare
+# 1. Secret 값 준비 (Argo CD는 아직 설치하지 않음)
+bash 02_scripts/prepare-database-secret.sh
+bash 02_scripts/prepare-jwt.sh
 
-# 2. 런북대로 UI에서 저장소 연결 후 Root 적용
+# 2. 서비스와 HPA 수동 배포·검증
+kubectl apply -k 03_manifests/eks
+
+# 3. Argo CD 설치 후 런북대로 저장소 연결·Root 적용
+bash 02_scripts/install-argocd.sh
 bash 02_scripts/bootstrap.sh apply-root
 ```
 

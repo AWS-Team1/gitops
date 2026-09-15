@@ -181,16 +181,21 @@ kubectl top nodes
 
 기존 YAML/다른 Helm release 소유 Metrics Server를 중복 설치하지 않는다.
 
-## 5. 앱 YAML 검증 → Argo CD가 처음부터 관리
+## 5. 서비스·HPA 수동 배포 → Argo CD 인수
 
-앱과 HPA YAML은 서버 dry-run으로 검사하되 직접 설치하지 않는다. 앱 Secret/JWT와
-CSI CRD는 Argo CD 설치 전에 준비되어 있어야 한다.
+팀 운영 순서에 따라 Argo CD 설치 전에 서비스와 HPA를 먼저 배포하고 동작을
+확인한다. 앱 Secret/JWT와 CSI CRD는 이 단계 전에 준비되어 있어야 한다.
 
 ```bash
 kubectl apply --dry-run=server -k 03_manifests/eks
+kubectl apply -k 03_manifests/eks
+kubectl -n bank-of-anthos get deployments,pods,jobs,ingress,hpa
+kubectl -n bank-of-anthos wait --for=condition=complete job/db-bootstrap --timeout=10m
+kubectl -n bank-of-anthos rollout status deployment/frontend --timeout=10m
 ```
 
-실제 앱/Ingress/HPA 설치는 아래 Root Application을 Sync하면서 시작한다.
+서비스와 HPA가 정상 동작하는 것을 확인한 뒤 Argo CD를 설치한다. 아래 명령은
+Argo CD 자체와 UI 노출만 설치하며 앱을 다시 `kubectl apply`하지 않는다.
 
 ```bash
 bash 02_scripts/install-argocd.sh          # Helm chart 10.4.0
@@ -215,7 +220,8 @@ bash 02_scripts/verify-argocd.sh
 
 Root 포함 6개 Application이 `Synced/Healthy`이고 revision이 `$BRANCH`의
 최신 commit인지 확인한다. 최초 Sync 전에 이미지/Ingress/SecretProviderClass
-ARN 및 prune 대상의 Diff를 읽는다. `boa-accounts`, `boa-ledger`,
+ARN 및 prune 대상의 Diff를 읽는다. 기존 수동 리소스를 Argo CD가 인수하며,
+`boa-accounts`, `boa-ledger`,
 `boa-frontend`는
 [`ignoreDifferences` + `RespectIgnoreDifferences`](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-options/#respect-ignore-differences-configs)로
 Deployment `/spec/replicas`를 HPA에 맡긴다.
