@@ -5,7 +5,6 @@ kind: Deployment
 metadata:
   name: contacts
 spec:
-  # replicas: 1
   selector:
     matchLabels:
       app: contacts
