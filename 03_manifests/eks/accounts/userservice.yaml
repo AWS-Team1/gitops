@@ -5,7 +5,6 @@ kind: Deployment
 metadata:
   name: userservice
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: userservice
