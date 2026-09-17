@@ -8,7 +8,7 @@ Argo CD가 나중에 읽을 선언은 `03_manifests/eks/`에 따로 있다.
 | 파일 | 역할 | 예상 결과 |
 | --- | --- | --- |
 | `namespace.yaml`, `serviceaccounts.yaml` | 앱 Namespace와 Pod Identity용 계정 | `bank-of-anthos` Namespace, ServiceAccount 2개 |
-| `secrets.yaml`, `secret-sync.yaml` | AWS Secrets Manager 값을 CSI로 mount·동기화 | SecretProviderClass 2개, `secret-sync` Deployment, `db-secret` |
+| `secrets.yaml`, `secret-sync.yaml` | AWS Secrets Manager 값을 CSI로 mount·동기화 | SecretProviderClass 4개, `secret-sync` Deployment, DB Secret 3개 |
 | `configmap.yaml`, `0-*.sql`, `db-bootstrap.yaml` | DB 접속 설정·스키마 초기화 | ConfigMap 2개, `db-bootstrap` Job `Complete` |
 | `contacts.yaml`, `userservice.yaml`, `balancereader.yaml`, `ledgerwriter.yaml`, `transactionhistory.yaml`, `frontend.yaml` | 서비스 6개 | Deployment/Service 각각 6개, Pod `Running` |
 | `hpa.yaml` | CPU 기반 자동 확장 | HPA 6개, 각 `minReplicas=2`, `maxReplicas=3`, CPU 목표 70% |
@@ -76,7 +76,7 @@ server dry-run이 가능하다. 마지막 명령은 Service, Deployment 7개(앱
 
 ```bash
 kubectl -n bank-of-anthos rollout status deployment/bank-of-anthos-secret-sync --timeout=5m
-kubectl -n bank-of-anthos get secret db-secret
+kubectl -n bank-of-anthos get secret db-secret accounts-db-secret ledger-db-secret
 kubectl -n bank-of-anthos wait --for=condition=complete job/db-bootstrap --timeout=10m
 for app in contacts userservice balancereader ledgerwriter transactionhistory frontend; do
   kubectl -n bank-of-anthos rollout status "deployment/$app" --timeout=10m
@@ -85,14 +85,14 @@ kubectl -n bank-of-anthos get deployments,services,pods,jobs,ingress,hpa
 kubectl -n bank-of-anthos get hpa -o wide
 ```
 
-예상 결과는 `secret-sync`와 앱 Pod가 `Running/Ready`, `db-secret`이 `Opaque`
+예상 결과는 `secret-sync`와 앱 Pod가 `Running/Ready`, DB Secret 3개가 `Opaque`
 및 키 2개, `db-bootstrap`이 `Complete`, 서비스 Deployment 6개가 rollout
 완료인 것이다. `boa-ingress`의 ADDRESS에는 AWS Load Balancer Controller가
 만든 앱 ALB DNS가 나타난다. HPA는 6개여야 하고 TARGETS가 지속적으로
 `<unknown>`이면 Metrics Server 또는 Pod CPU request를 확인한다. Pod 수는
 부하에 따라 2~3개다. CPU가 낮아도 최소 2개 미만으로 줄지 않는다.
 
-`db-secret`은 CSI mount Pod가 있을 때 동기화되는 Kubernetes Secret이다.
+DB Secret 3개는 CSI mount Pod가 있을 때 동기화되는 Kubernetes Secret이다.
 앱 Pod가 모두 내려가면 사라질 수 있다. 여기서는 `secret-sync` Pod가 계속
 mount해서 유지한다. Secret 값을 조회할 때 `-o yaml`이나 `-o json`으로
 데이터를 출력하지 않는다. 문제 조사에는 다음 명령을 사용한다.

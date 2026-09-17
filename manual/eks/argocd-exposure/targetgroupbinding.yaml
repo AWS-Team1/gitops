@@ -2,6 +2,7 @@ apiVersion: elbv2.k8s.aws/v1beta1
 kind: TargetGroupBinding
 metadata:
   name: argocd-server
+  namespace: argocd
 spec:
   serviceRef:
     name: argocd-server

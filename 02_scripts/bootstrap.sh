@@ -8,6 +8,13 @@ MODE=${1:-prepare}
 case "$MODE" in
   prepare)
     echo "== DB 애플리케이션 Secret 준비 =="
+    SECRET_NAME=/boa/database/app \
+    bash "$SCRIPT_DIR/prepare-database-secret.sh"
+
+    SECRET_NAME=/boa/database/accounts \
+    bash "$SCRIPT_DIR/prepare-database-secret.sh"
+
+    SECRET_NAME=/boa/database/ledger \
     bash "$SCRIPT_DIR/prepare-database-secret.sh"
 
     echo "== JWT 준비 =="

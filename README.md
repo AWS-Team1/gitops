@@ -19,6 +19,7 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 ├── install-argocd.sh
 ├── prepare-database-secret.sh
 ├── prepare-jwt.sh
+├── render-aws-runtime.sh
 ├── verify-argocd.sh
 └── teardown-cluster.sh
 03_manifests/
@@ -39,17 +40,26 @@ manual/eks/
 ## 배포 흐름
 
 ```bash
-# 1. Secret 값 준비 (Argo CD는 아직 설치하지 않음)
-bash 02_scripts/prepare-database-secret.sh
-bash 02_scripts/prepare-jwt.sh
+# 1. DB 비밀번호 파일 생성 후 Infra가 Secrets Manager Version 생성
+for name in app accounts ledger; do
+  SECRET_NAME="/boa/database/$name" bash 02_scripts/prepare-database-secret.sh
+done
+terraform -chdir=../Infra/aws-db-bootstrap apply
 
-# 2. 서비스와 HPA 수동 배포·검증 (Argo CD source와 분리)
+# 2. Terraform output으로 manual YAML만 갱신
+bash 02_scripts/render-aws-runtime.sh --infra-root "$(cd ../Infra && pwd)"
+
+# 3. 나머지 Secret과 서비스/HPA 수동 배포
+bash 02_scripts/prepare-jwt.sh
 kubectl apply -k manual/eks
 
-# 3. Argo CD 설치 후 런북대로 저장소 연결·Root 적용
+# 4. Argo CD 설치 후 런북대로 저장소 연결·Root 적용
 bash 02_scripts/install-argocd.sh
 bash 02_scripts/bootstrap.sh apply-root
 ```
+
+`render-aws-runtime.sh`는 `manual/eks`만 수정한다. Argo CD가 읽는
+`03_manifests/eks/shared/secrets.yaml` 값은 확인 후 직접 수정·commit·push한다.
 
 Root Application은 `applications/`를 읽고, child Application이 `shared`,
 `accounts`, `ledger`, `frontend`를 배포합니다. 워크로드에 직접
