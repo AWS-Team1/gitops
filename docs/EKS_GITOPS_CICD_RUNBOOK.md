@@ -64,6 +64,9 @@ bash gitops/02_scripts/bootstrap.sh all
 
 Bootstrap은 EKS 내부 작업만 순서대로 수행한다.
 
+> frontend에는 별도 도메인이 없다. `boa-ingress`가 만든 전용 ALB의 AWS DNS로 검증한다.
+> `argocd.bespinglobal.site`는 frontend와 무관한 Argo CD 전용 ops ALB 주소다.
+
 1. EKS kubeconfig와 JWT 준비
 2. Metrics Server 설치
 3. manual YAML 적용, DB bootstrap과 앱 6개 rollout/HTTP 확인

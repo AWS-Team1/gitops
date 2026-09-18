@@ -105,8 +105,9 @@ prepare_cluster() {
 
   # 7. 앱 ALB가 실제 HTTP 요청에 응답하는지 확인한다.
   verify_frontend
-  echo "완료: frontend HTTP 응답 확인"
-  echo "EKS 최초 준비 완료: https://argocd.bespinglobal.site 에서 저장소를 연결하세요."
+  echo "완료: frontend 전용 Ingress ALB DNS의 HTTP 응답 확인"
+  echo "EKS 최초 준비 완료"
+  echo "Argo CD 전용 ops ALB UI: https://argocd.bespinglobal.site"
 }
 
 verify_cluster() {

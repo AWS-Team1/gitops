@@ -28,6 +28,9 @@ bash gitops/02_scripts/bootstrap.sh manual
 - UI 저장소 연결 후 Root Application 적용
 - Application 5개, HPA 6개, Karpenter 최종 검증
 
+frontend는 별도 도메인 없이 `boa-ingress`가 만든 앱 ALB DNS를 사용한다.
+`argocd.bespinglobal.site`는 별도 ops ALB에 연결된 Argo CD UI 전용 주소다.
+
 세부 순서와 중단 후 재실행 모드는
 [통합 런북](../../docs/EKS_GITOPS_CICD_RUNBOOK.md)을 따른다.
 
