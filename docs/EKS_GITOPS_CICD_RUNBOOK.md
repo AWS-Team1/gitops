@@ -8,8 +8,8 @@
 ### Critical
 
 - AWS 계정이 `769413326616`이 아니면 `bootstrap.sh`가 중단한다.
-- `boa.internal` Private Hosted Zone 자체는 기존 리소스를 사용한다. `aws-core`가 새 VPC와의
-  association을 Terraform으로 관리하므로 동일 이름의 Private Zone이 계정에 있어야 한다.
+- `boa.internal` Private Hosted Zone은 Terraform이 생성하지 않고 조회만 한다. 기존
+  `vpc-07194d5f908bac7cf`에 미리 연결되어 있어야 한다.
 - Argo CD의 private GitHub 저장소 Credential 연결은 UI에서 한 번 수행해야 한다.
 
 ### Warning
