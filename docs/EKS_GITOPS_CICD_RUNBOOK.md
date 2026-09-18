@@ -41,6 +41,8 @@ AWS CLI, Terraform, kubectl, Helm, Git, OpenSSL, curl도 설치되어 있어야 
 ```bash
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 test "$ACCOUNT" = "769413326616" || { echo "잘못된 AWS 계정: $ACCOUNT" >&2; exit 1; }
+ZONE_ID=$(aws route53 list-hosted-zones-by-vpc --vpc-id vpc-07194d5f908bac7cf --vpc-region ap-northeast-2 --query "HostedZoneSummaries[?Name=='boa.internal.'].HostedZoneId | [0]" --output text)
+test -n "$ZONE_ID" && test "$ZONE_ID" != "None" || { echo "boa.internal Private Hosted Zone이 기존 VPC에 연결되지 않았습니다." >&2; exit 1; }
 
 for name in app accounts ledger; do
   SECRET_NAME="/boa/database/$name" bash gitops/02_scripts/prepare-database-secret.sh
