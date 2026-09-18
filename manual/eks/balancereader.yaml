@@ -23,7 +23,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: balancereader
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/balancereader:sha-ce6d9485b1c4c352bb6a033c8fb531f784545cd9
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-balancereader:sha-5119a072b272d49d26fd4207f755d2494f0f3ad5
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -46,15 +46,15 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
+                  name: ledger-db-secret
                   key: username
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: db-secret
+                  name: ledger-db-secret
                   key: password
             - name: SPRING_DATASOURCE_URL
-              value: "jdbc:postgresql://db.boa.internal:5432/boadb"
+              value: "jdbc:postgresql://db.boa.internal:5432/ledgerdb"
             - name: SPRING_DATASOURCE_USERNAME
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
@@ -78,7 +78,7 @@ spec:
             driver: secrets-store.csi.k8s.io
             readOnly: true
             volumeAttributes:
-              secretProviderClass: bank-of-anthos-secrets
+              secretProviderClass: bank-of-anthos-ledger-secrets
 ---
 # Source: bank-of-anthos/templates/balancereader/service.yaml
 apiVersion: v1

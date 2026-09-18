@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-expected_apps=6
+expected_apps=5
 bad=0
 
 kubectl -n argocd get applications \

@@ -9,7 +9,7 @@ spec:
   project: boa
   # HARD-CODED: 재사용할 GitHub 조직/저장소/브랜치에 맞게 변경한다.
   source:
-    repoURL: https://github.com/AWS-TEAM1-DEV/gitops.git
+    repoURL: https://github.com/AWS-Team1/gitops.git
     targetRevision: feat/manual-yaml
     path: 03_manifests/eks/shared
   destination:

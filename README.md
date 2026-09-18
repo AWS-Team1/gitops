@@ -3,8 +3,8 @@
 EKS용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
 AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terraform이 소유합니다.
 
-현재 브랜치의 설치·검증·삭제 순서는
-[`docs/EKS_APP_ARGO_KARPENTER_HPA_RUNBOOK.md`](docs/EKS_APP_ARGO_KARPENTER_HPA_RUNBOOK.md)를 따릅니다.
+현재 브랜치의 설치·검증 순서는
+[`docs/EKS_GITOPS_CICD_RUNBOOK.md`](docs/EKS_GITOPS_CICD_RUNBOOK.md)를 따릅니다.
 기존 `jiho-test-cd` 기준 AWS 값 교체·저장소 연결 상세는
 [`docs/ARGOCD_EKS_RUNBOOK.md`](docs/ARGOCD_EKS_RUNBOOK.md)를 참고합니다.
 
@@ -19,6 +19,7 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 ├── install-argocd.sh
 ├── prepare-database-secret.sh
 ├── prepare-jwt.sh
+├── render-aws-runtime.sh
 ├── verify-argocd.sh
 └── teardown-cluster.sh
 03_manifests/
@@ -39,17 +40,15 @@ manual/eks/
 ## 배포 흐름
 
 ```bash
-# 1. Secret 값 준비 (Argo CD는 아직 설치하지 않음)
-bash 02_scripts/prepare-database-secret.sh
-bash 02_scripts/prepare-jwt.sh
-
-# 2. 서비스와 HPA 수동 배포·검증 (Argo CD source와 분리)
-kubectl apply -k manual/eks
-
-# 3. Argo CD 설치 후 런북대로 저장소 연결·Root 적용
-bash 02_scripts/install-argocd.sh
-bash 02_scripts/bootstrap.sh apply-root
+# Terraform 적용과 render-aws-runtime.sh 실행 후, final-project-dev에서 실행
+bash gitops/02_scripts/bootstrap.sh all
 ```
+
+Terraform은 bootstrap 범위가 아니다. 중단 후에는 `prepare`, `apply-root`, `verify` 모드로
+EKS 내부의 큰 단계만 다시 실행한다.
+
+`render-aws-runtime.sh`는 `manual/eks`만 수정한다. Argo CD가 읽는
+`03_manifests/eks/shared/secrets.yaml` 값은 확인 후 직접 수정·commit·push한다.
 
 Root Application은 `applications/`를 읽고, child Application이 `shared`,
 `accounts`, `ledger`, `frontend`를 배포합니다. 워크로드에 직접
