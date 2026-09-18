@@ -6,9 +6,13 @@ SECRET_NAME="${SECRET_NAME:-/boa/database/app}"
 CACHE_DIR="${DB_PASSWORD_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/boa/database}"
 PASSWORD_FILE="${PASSWORD_FILE:-$CACHE_DIR/${SECRET_NAME##*/}.password}"
 
-command -v openssl >/dev/null || { echo "ERROR: 필수 명령 없음: openssl" >&2; exit 1; }
+command -v openssl >/dev/null || {
+  echo "ERROR: 필수 명령 없음: openssl" >&2
+  exit 1
+}
 
 install -d -m 700 "$CACHE_DIR"
+
 if [[ -s "$PASSWORD_FILE" ]]; then
   chmod 600 "$PASSWORD_FILE"
   echo "기존 DB 비밀번호 파일을 재사용합니다: $PASSWORD_FILE"
