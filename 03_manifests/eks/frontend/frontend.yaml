@@ -28,6 +28,8 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            - name: ENV_PLATFORM
+              value: "aws"
             - name: VERSION
               value: "1.0"
             - name: PORT
