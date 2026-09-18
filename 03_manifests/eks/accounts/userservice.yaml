@@ -23,7 +23,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: userservice
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-668b867992ab8112ea20a48cae8fdca5687f325c
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-69acaf553d7e16798c253d4e437b56ecce42590b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
