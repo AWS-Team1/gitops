@@ -56,9 +56,11 @@ prepare_cluster() {
   kubectl get nodes -o wide
   ! kubectl -n argocd get applications --no-headers 2>/dev/null | grep -q . ||
     die "Argo CD가 이미 앱을 관리합니다. prepare 대신 verify를 실행하세요."
+  echo "완료: EKS 연결 및 기존 Argo CD 관리 여부 확인"
 
   # 2. 애플리케이션이 사용할 JWT 키를 Secrets Manager에 준비한다.
   bash "$SCRIPT_DIR/prepare-jwt.sh"
+  echo "완료: JWT Secret 준비"
 
   # 3. HPA가 CPU 지표를 읽도록 Metrics Server가 없을 때만 설치한다.
   if ! kubectl get apiservice v1beta1.metrics.k8s.io >/dev/null 2>&1; then
@@ -66,6 +68,7 @@ prepare_cluster() {
     helm upgrade --install metrics-server metrics-server/metrics-server \
       -n kube-system --wait --timeout 10m
   fi
+  echo "완료: Metrics Server 준비"
 
   # 4. 최초 manual YAML을 적용하고 DB bootstrap과 앱 6개가 준비될 때까지 기다린다.
   kubectl kustomize "$REPO_ROOT/manual/eks" >/dev/null
@@ -79,10 +82,12 @@ prepare_cluster() {
   for app in userservice contacts balancereader ledgerwriter transactionhistory frontend; do
     kubectl -n bank-of-anthos rollout status "deployment/$app" --timeout=10m
   done
+  echo "완료: manual YAML, DB bootstrap, 앱 6개 배포"
 
   # 5. Argo CD를 설치하고 Terraform이 만든 UI Target Group에 연결한다.
   bash "$SCRIPT_DIR/install-argocd.sh"
   kubectl apply -f "$REPO_ROOT/manual/eks/argocd-exposure/targetgroupbinding.yaml"
+  echo "완료: Argo CD 및 UI TargetGroupBinding 설치"
 
   # 6. Karpenter Controller와 노드 생성 정책을 설치한다.
   helm upgrade --install karpenter \
@@ -96,10 +101,12 @@ prepare_cluster() {
   kubectl wait --for=condition=Ready ec2nodeclass/default --timeout=5m
   kubectl apply -f "$REPO_ROOT/manual/eks/karpenter/nodepool.yaml"
   kubectl wait --for=condition=Ready nodepool/default --timeout=5m
+  echo "완료: Karpenter Controller, EC2NodeClass, NodePool 설치"
 
   # 7. 앱 ALB가 실제 HTTP 요청에 응답하는지 확인한다.
   verify_frontend
-  echo "준비 완료: https://argocd.bespinglobal.site 에서 저장소를 연결하세요."
+  echo "완료: frontend HTTP 응답 확인"
+  echo "EKS 최초 준비 완료: https://argocd.bespinglobal.site 에서 저장소를 연결하세요."
 }
 
 verify_cluster() {
@@ -145,6 +152,7 @@ apply_root() {
     --for=jsonpath='{.status.sync.status}'=Synced --timeout=15m
   kubectl -n argocd wait applications --all \
     --for=jsonpath='{.status.health.status}'=Healthy --timeout=15m
+  echo "완료: Root 및 Child Application 5개 동기화"
   verify_cluster
 }
 
