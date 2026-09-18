@@ -18,7 +18,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
-    targetRevision: feat/manual-yaml
+    targetRevision: chore/gitops-runtime-bootstrap-runbook
     path: 03_manifests/eks/applications
   destination:
     server: https://kubernetes.default.svc
