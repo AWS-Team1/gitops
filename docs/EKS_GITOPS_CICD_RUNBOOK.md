@@ -39,6 +39,9 @@ AWS CLI, Terraform, kubectl, Helm, Git, OpenSSL, curl도 설치되어 있어야 
 ## 2. Terraform 적용과 runtime 렌더
 
 ```bash
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+test "$ACCOUNT" = "769413326616" || { echo "잘못된 AWS 계정: $ACCOUNT" >&2; exit 1; }
+
 for name in app accounts ledger; do
   SECRET_NAME="/boa/database/$name" bash gitops/02_scripts/prepare-database-secret.sh
 done
@@ -49,6 +52,7 @@ for root in aws-core aws-rds aws-cache aws-eks aws-ops aws-db-bootstrap; do
   terraform -chdir="Infra/$root" validate
   terraform -chdir="Infra/$root" plan -out=tfplan
   terraform -chdir="Infra/$root" apply tfplan
+  rm -f "Infra/$root/tfplan"
 done
 
 bash gitops/02_scripts/render-aws-runtime.sh --infra-root "$(cd Infra && pwd)"
@@ -77,8 +81,7 @@ Bootstrap은 EKS 내부 작업만 순서대로 수행한다.
 8. Argo CD 5개 앱, HPA 6개, Karpenter, frontend HTTP 최종 검증
 
 중간에 멈추면 `03_manifests/eks/shared/secrets.yaml`의 RDS master ARN과 Application의
-`repoURL`, `targetRevision`을 배포할 원격 브랜치에 맞게 수정·commit·push한다. 그다음 UI
-작업을 한다.
+`targetRevision`을 배포할 원격 브랜치에 맞게 수정·commit·push한다. 그다음 UI 작업을 한다.
 
 > Argo CD UI 저장소 연결도 Successful이면 Enter를 누르세요
 
@@ -115,7 +118,7 @@ PAT는 파일이나 Git에 저장하지 않는다. 연결이 `Successful`이면 
 | `verify-argocd.sh` | Argo CD Application 5개 상태 검증 |
 
 `render-aws-runtime.sh`는 manual YAML만 수정한다. Argo CD가 읽는
-`03_manifests/eks/shared/secrets.yaml`의 RDS master ARN과 Application의 `repoURL`,
+`03_manifests/eks/shared/secrets.yaml`의 RDS master ARN과 Application의
 `targetRevision`은 원격 GitOps 브랜치에 맞게 직접 수정·commit·push해야 한다.
 
 ## 5. CI/CD 점검
