@@ -16,7 +16,7 @@
 4. 비공개 Git 저장소를 계속 읽을 수 있는 PAT 또는 전용 계정을 준비한다. GitHub Actions의 짧게 만료되는 기본 `GITHUB_TOKEN`은 지속적인 Argo CD 동기화 자격 증명으로 사용하지 않는다.
 5. Terraform이 EKS의 Secrets Store CSI/AWS provider와 AWS Load Balancer Controller를, GKE의 Secret Manager/Secret Sync add-on을 먼저 생성해야 한다. 스크립트는 이 CRD와 컨트롤러가 없으면 배포 전에 중단한다.
 
-현재 GKE의 Secret Sync는 CLI로 활성화했지만 `Infra/gcp-modules/gke/main.tf`에는 아직 선언되어 있지 않다. 다음 GCP Terraform 적용 전에 `secret_manager_config`를 코드에 반영해야 현재 상태를 지속적으로 보장할 수 있다.
+GKE Secret Sync는 `Infra/gcp-modules/gke/main.tf`의 `secret_manager_config`로 선언한다. 따라서 GKE를 재생성해도 SecretSync CRD가 다시 준비된다.
 
 ## 한 번에 설치 및 배포
 

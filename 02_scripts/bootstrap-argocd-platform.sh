@@ -24,9 +24,12 @@ CONTEXT=$(kubectl config current-context)
 }
 
 kubectl wait node --all --for=condition=Ready --timeout=5m
-kubectl get crd secretproviderclasses.secrets-store.csi.x-k8s.io >/dev/null
+kubectl wait --for=condition=Established \
+  crd/secretproviderclasses.secrets-store.csi.x-k8s.io --timeout=5m
 if [[ "$PLATFORM" == gke ]]; then
-  kubectl get crd secretsyncs.secret-sync.gke.io >/dev/null
+  "$SCRIPT_DIR/prepare-jwt-gcp.sh"
+  kubectl wait --for=condition=Established \
+    crd/secretsyncs.secret-sync.gke.io --timeout=5m
 else
   kubectl -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=5m
 fi

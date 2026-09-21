@@ -6,6 +6,8 @@ GKE overlay는 컷오버 전 standby 구성이며 6개 Deployment를 `replicas: 
 
 현재 브랜치의 설치·검증 순서는
 [`docs/EKS_GITOPS_CICD_RUNBOOK.md`](docs/EKS_GITOPS_CICD_RUNBOOK.md)를 따릅니다.
+AWS/GCP 클러스터 동시 재생성·배포는
+[`docs/CLUSTER_REBUILD_RUNBOOK.md`](docs/CLUSTER_REBUILD_RUNBOOK.md)를 따릅니다.
 기존 `jiho-test-cd` 기준 AWS 값 교체·저장소 연결 상세는
 [`docs/ARGOCD_EKS_RUNBOOK.md`](docs/ARGOCD_EKS_RUNBOOK.md)를 참고합니다.
 
@@ -16,13 +18,16 @@ GKE overlay는 컷오버 전 standby 구성이며 6개 Deployment를 `replicas: 
 ├── argocd-values.yaml
 └── root-application-eks.yaml
 02_scripts/
+├── bootstrap-all.sh
 ├── bootstrap.sh
 ├── install-argocd.sh
 ├── prepare-database-secret.sh
 ├── prepare-jwt.sh
+├── prepare-jwt-gcp.sh
 ├── render-aws-runtime.sh
 ├── verify-argocd.sh
-└── teardown-cluster.sh
+├── teardown-cluster.sh
+└── teardown-gke.sh
 03_manifests/
 ├── base/                         # 공통 Deployment, Service, NetworkPolicy
 │   ├── accounts/
