@@ -1,46 +1,14 @@
----
-# Source: bank-of-anthos/templates/ledgerwriter/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ledgerwriter
 spec:
-  selector:
-    matchLabels:
-      app: ledgerwriter
   template:
-    metadata:
-      labels:
-        app: ledgerwriter
     spec:
-      serviceAccountName: bank-of-anthos
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app: ledgerwriter
-              topologyKey: kubernetes.io/hostname
       containers:
         - name: ledgerwriter
           image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-ledgerwriter:sha-6681a79a9688212b93c2a230c5e0db37bf9b7671
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8080
           env:
-            - name: VERSION
-              value: "1.0"
-            - name: PORT
-              value: "8080"
-            - name: ENABLE_TRACING
-              value: "false"
-            - name: LOCAL_ROUTING_NUM
-              value: "883745000"
-            - name: PUB_KEY_PATH
-              value: /tmp/.ssh/jwtRS256.key.pub
-            - name: BALANCES_API_ADDR
-              value: "balancereader:8080"
-            # DB (stable private DNS / boadb)
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -57,78 +25,11 @@ spec:
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "$(POSTGRES_PASSWORD)"
-            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
-              value: "3"
-          volumeMounts:
-            - name: secrets-store
-              mountPath: /tmp/.ssh
-              readOnly: true
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
       volumes:
+        - $patch: replace
         - name: secrets-store
           csi:
             driver: secrets-store.csi.k8s.io
             readOnly: true
             volumeAttributes:
               secretProviderClass: bank-of-anthos-ledger-secrets
----
-# Source: bank-of-anthos/templates/ledgerwriter/service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: ledgerwriter
-spec:
-  selector:
-    app: ledgerwriter
-  ports:
-    - protocol: TCP
-      port: 8080
-      targetPort: 8080
-  type: ClusterIP
----
-# Source: bank-of-anthos/templates/ledgerwriter/networkpolicy.yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: ledgerwriter-networkpolicy
-spec:
-  podSelector:
-    matchLabels:
-      app: ledgerwriter
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: frontend
-      ports:
-        - port: 8080
-  egress:
-    # RDS boa-postgres DB subnet A/C
-    - to:
-        - ipBlock:
-            cidr: 192.168.16.0/24
-        - ipBlock:
-            cidr: 192.168.17.0/24
-      ports:
-        - port: 5432
-    # balancereader 호출 (송금 전 잔액 확인)
-    - to:
-        - podSelector:
-            matchLabels:
-              app: balancereader
-      ports:
-        - port: 8080
-    - ports:
-        - port: 53
-          protocol: UDP
-        - port: 53
-          protocol: TCP

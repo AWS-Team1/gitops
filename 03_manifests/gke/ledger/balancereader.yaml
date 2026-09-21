@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balancereader
+spec:
+  replicas: 0
+  template:
+    spec:
+      containers:
+        - name: balancereader
+          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-balancereader:sha-6681a79a9688212b93c2a230c5e0db37bf9b7671
+          env:
+            - name: POSTGRES_USER
+              value: "ledger_app"
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db-secret
+                  key: password
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://10.50.1.5:5432/ledgerdb"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "$(POSTGRES_USER)"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "$(POSTGRES_PASSWORD)"
+      volumes:
+        - $patch: replace
+        - name: secrets-store
+          secret:
+            secretName: bank-app-jwt
+            items:
+              - key: jwtRS256.key.pub
+                path: jwtRS256.key.pub

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 0
+  template:
+    spec:
+      containers:
+        - name: frontend
+          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-frontend:sha-6189ddaa5aae2a2a9d15c1ddca53fe2aea45553f
+          env:
+            - name: ENV_PLATFORM
+              value: "gcp"
+      volumes:
+        - $patch: replace
+        - name: secrets-store
+          secret:
+            secretName: bank-app-jwt
+            items:
+              - key: jwtRS256.key.pub
+                path: jwtRS256.key.pub
