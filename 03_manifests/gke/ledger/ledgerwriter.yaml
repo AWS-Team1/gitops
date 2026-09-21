@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: ledgerwriter
-          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-ledgerwriter:sha-6681a79a9688212b93c2a230c5e0db37bf9b7671
+          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-ledgerwriter:sha-c2853726f19ad8da481ee88c7ff11d0b47e7aa3c
           env:
             - name: POSTGRES_USER
               value: "ledger_app"
