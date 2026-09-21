@@ -19,6 +19,7 @@ ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format='value(account)' | he
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 [[ -n "$PROJECT_NUMBER" ]] || die "GCP 프로젝트를 찾지 못했습니다: $PROJECT_ID"
 
+# Secret 컨테이너를 보장하고 GKE Workload Identity 주체에 읽기 권한을 부여한다.
 for secret in "$PRIVATE_SECRET" "$PUBLIC_SECRET"; do
   gcloud secrets describe "$secret" --project="$PROJECT_ID" >/dev/null 2>&1 ||
     gcloud secrets create "$secret" --project="$PROJECT_ID" --replication-policy=automatic >/dev/null
@@ -28,6 +29,7 @@ for secret in "$PRIVATE_SECRET" "$PUBLIC_SECRET"; do
     --member="$principal" --role=roles/secretmanager.secretAccessor >/dev/null
 done
 
+# 활성 버전이 하나라도 있으면 기존 키가 준비된 것으로 본다.
 has_enabled_version() {
   [[ -n $(gcloud secrets versions list "$1" --project="$PROJECT_ID" \
     --filter='state=ENABLED' --limit=1 --format='value(name)') ]]
@@ -38,6 +40,7 @@ PUBLIC_READY=false
 has_enabled_version "$PRIVATE_SECRET" && PRIVATE_READY=true
 has_enabled_version "$PUBLIC_SECRET" && PUBLIC_READY=true
 
+# 두 키가 모두 없을 때만 새 쌍을 만들며, 한쪽만 있으면 자동 복구하지 않고 중단한다.
 if [[ "$PRIVATE_READY" == false && "$PUBLIC_READY" == false ]]; then
   echo "JWT 키 쌍 최초 생성"
   trap 'unset PRIVATE_KEY PUBLIC_KEY' EXIT
@@ -54,6 +57,7 @@ else
   die "JWT Secret이 부분 준비 상태임(private=$PRIVATE_READY, public=$PUBLIC_READY)"
 fi
 
+# 비밀키에서 다시 만든 공개키와 저장된 공개키를 정규화해 실제 키 쌍인지 검증한다.
 DERIVED_PUBLIC=$(gcloud secrets versions access latest --secret="$PRIVATE_SECRET" \
   --project="$PROJECT_ID" | openssl pkey -pubout 2>/dev/null)
 STORED_PUBLIC=$(gcloud secrets versions access latest --secret="$PUBLIC_SECRET" \

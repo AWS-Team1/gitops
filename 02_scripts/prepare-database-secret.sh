@@ -13,12 +13,14 @@ command -v openssl >/dev/null || {
 
 install -d -m 700 "$CACHE_DIR"
 
+# 이미 생성된 비밀번호는 권한만 바로잡고 재사용해 DB 자격 증명 변경을 막는다.
 if [[ -s "$PASSWORD_FILE" ]]; then
   chmod 600 "$PASSWORD_FILE"
   echo "기존 DB 비밀번호 파일을 재사용합니다: $PASSWORD_FILE"
   exit 0
 fi
 
+# 새 비밀번호가 다른 사용자에게 노출되지 않도록 생성 전 파일 마스크를 제한한다.
 umask 077
 printf '%s' "$(openssl rand -hex 32)" >"$PASSWORD_FILE"
 echo "DB 비밀번호 파일을 생성했습니다: $PASSWORD_FILE"

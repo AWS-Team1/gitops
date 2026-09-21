@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# 두 플랫폼이 공통으로 참조할 인프라 경로와 비공개 저장소 인증 정보를 먼저 검증한다.
 : "${INFRA_ROOT:?set INFRA_ROOT to the Infra repository path}"
 : "${ARGOCD_REPO_USERNAME:?set ARGOCD_REPO_USERNAME}"
 : "${ARGOCD_REPO_PASSWORD:?set ARGOCD_REPO_PASSWORD}"
@@ -20,6 +21,7 @@ GKE_CONTEXT=${GKE_CONTEXT:-$(kubectl config get-contexts -o name | grep 'boa-gke
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf -- "$TMP_DIR"' EXIT
+# 병렬 실행 중 현재 컨텍스트가 서로 덮어쓰이지 않도록 kubeconfig를 플랫폼별로 분리한다.
 kubectl config view --raw >"$TMP_DIR/eks.config"
 cp "$TMP_DIR/eks.config" "$TMP_DIR/gke.config"
 KUBECONFIG="$TMP_DIR/eks.config" kubectl config use-context "$EKS_CONTEXT" >/dev/null
@@ -29,6 +31,7 @@ KUBECONFIG="$TMP_DIR/gke.config" kubectl config use-context "$GKE_CONTEXT" >/dev
 "$SCRIPT_DIR/render-aws-runtime.sh" --infra-root "$INFRA_ROOT"
 
 echo "AWS/GCP GitOps bootstrap 동시 시작"
+# Helm 캐시도 플랫폼별로 나눠 두 bootstrap이 같은 파일을 동시에 수정하지 않게 한다.
 (
   export KUBECONFIG="$TMP_DIR/eks.config"
   export HELM_CONFIG_HOME="$TMP_DIR/helm-eks/config"
@@ -49,6 +52,7 @@ EKS_PID=$!
 GKE_PID=$!
 
 set +e
+# 한쪽이 먼저 실패해도 두 작업을 모두 회수한 뒤 전체 결과를 판정한다.
 wait "$EKS_PID"; EKS_STATUS=$?
 wait "$GKE_PID"; GKE_STATUS=$?
 set -e
