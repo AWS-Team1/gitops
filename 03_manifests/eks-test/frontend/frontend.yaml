@@ -32,7 +32,8 @@ spec:
             - name: TOKEN_REFRESH_WINDOW_SECONDS
               value: "30"
             - name: COOKIE_SECURE
-              value: "true"
+              # 테스트 Ingress가 HTTP만 사용한다. HTTPS를 붙이면 true로 되돌린다.
+              value: "false"
       volumes:
         - $patch: replace
         - name: secrets-store

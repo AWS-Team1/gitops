@@ -10,5 +10,6 @@ data:
   DB_HOST: db.test.boa.internal
   DB_PORT: "5432"
   DB_NAME: boadb
-  VALKEY_HOST: boa-test-valkey-qkkgxc.serverless.apn2.cache.amazonaws.com
+  # Serverless cache 재생성마다 endpoint가 바뀐다. 배포 전에 실제 주소로 교체한다.
+  VALKEY_HOST: REPLACE_AFTER_VALKEY_CREATE
   VALKEY_PORT: "6379"
