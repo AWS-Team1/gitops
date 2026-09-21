@@ -1,0 +1,122 @@
+---
+# Source: bank-of-anthos/templates/userservice/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: userservice
+spec:
+  selector:
+    matchLabels:
+      app: userservice
+  template:
+    metadata:
+      labels:
+        app: userservice
+    spec:
+      serviceAccountName: bank-of-anthos
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: userservice
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: userservice
+          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-userservice:sha-9b9dbb44d7375e5cf0f2ebab87616ac8885bc5dd
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VERSION
+              value: "1.0"
+            - name: PORT
+              value: "8080"
+            - name: ENABLE_TRACING
+              value: "false"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: REDIS_URL
+              value: ""
+            - name: TOKEN_EXPIRY_SECONDS
+              value: "3600"
+            - name: PRIV_KEY_PATH
+              value: /tmp/.ssh/jwtRS256.key
+            - name: PUB_KEY_PATH
+              value: /tmp/.ssh/jwtRS256.key.pub
+            # Accounts 전용 로그인 role. 비밀번호만 SecretSync로 동기화한다.
+            - name: POSTGRES_USER
+              value: "accounts_app"
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: accounts-db-secret
+                  key: password
+            - name: ACCOUNTS_DB_URI
+              value: "postgresql+psycopg2://$(POSTGRES_USER)@10.50.1.5:5432/accountsdb"
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /tmp/.ssh
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: secrets-store
+          secret:
+            secretName: bank-app-jwt
+            items:
+              - key: jwtRS256.key
+                path: jwtRS256.key
+              - key: jwtRS256.key.pub
+                path: jwtRS256.key.pub
+---
+# Source: bank-of-anthos/templates/userservice/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: userservice
+spec:
+  selector:
+    app: userservice
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# Source: bank-of-anthos/templates/userservice/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: userservice-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: userservice
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - port: 8080
+  egress:
+    # Cloud SQL private IP
+    - to:
+        - ipBlock:
+            cidr: 10.50.1.5/32
+      ports:
+        - port: 5432
+    - ports:                      # default-deny 때문에 DNS egress 필수
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
