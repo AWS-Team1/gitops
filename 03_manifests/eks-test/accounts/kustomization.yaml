@@ -1,0 +1,50 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bank-of-anthos
+resources:
+  - ../../base/accounts
+patches:
+  - path: userservice.yaml
+  - path: contacts.yaml
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: userservice-networkpolicy
+    patch: &rds-egress |-
+      - op: replace
+        path: /spec/egress/0/to
+        value:
+          - ipBlock:
+              cidr: 10.0.16.0/24
+          - ipBlock:
+              cidr: 10.0.17.0/24
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: contacts-networkpolicy
+    patch: *rds-egress
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: userservice-networkpolicy
+    patch: &valkey-egress |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          to:
+            - ipBlock:
+                cidr: 10.0.24.0/24
+            - ipBlock:
+                cidr: 10.0.25.0/24
+          ports:
+            - port: 6379
+              protocol: TCP
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: contacts-networkpolicy
+    patch: *valkey-egress

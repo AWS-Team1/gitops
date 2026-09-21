@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  template:
+    spec:
+      containers:
+        - name: frontend
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-test-frontend:sha-6189ddaa5aae2a2a9d15c1ddca53fe2aea45553f
+          env:
+            - name: ENV_PLATFORM
+              value: "aws"
+            - name: VALKEY_HOST
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_HOST}}
+            - name: VALKEY_PORT
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_PORT}}
+            - name: VALKEY_USERNAME
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: username}}
+            - name: VALKEY_PASSWORD
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
+            - name: VALKEY_TLS
+              value: "true"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
+            - name: SESSION_IDLE_TTL_SECONDS
+              value: "300"
+            - name: SESSION_ABSOLUTE_TTL_SECONDS
+              value: "3600"
+            - name: SESSION_MAX_PER_USER
+              value: "3"
+            - name: TOKEN_REFRESH_WINDOW_SECONDS
+              value: "30"
+            - name: COOKIE_SECURE
+              value: "true"
+      volumes:
+        - $patch: replace
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-secrets
