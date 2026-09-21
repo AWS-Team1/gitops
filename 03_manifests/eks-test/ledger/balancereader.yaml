@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: balancereader
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-test-balancereader:sha-6681a79a9688212b93c2a230c5e0db37bf9b7671
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-test-balancereader:sha-eea7f9bbfb577bcca54d8670db37638e0bfe6ec4
           env:
             - name: POSTGRES_USER
               valueFrom:
