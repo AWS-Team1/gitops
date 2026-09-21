@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: userservice
+spec:
+  template:
+    spec:
+      containers:
+        - name: userservice
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-test-userservice:sha-9b9dbb44d7375e5cf0f2ebab87616ac8885bc5dd
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: accounts-db-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: accounts-db-secret
+                  key: password
+            - name: ACCOUNTS_DB_URI
+              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.test.boa.internal:5432/accountsdb"
+            - name: VALKEY_HOST
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_HOST}}
+            - name: VALKEY_PORT
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_PORT}}
+            - name: VALKEY_USERNAME
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: username}}
+            - name: VALKEY_PASSWORD
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
+            - name: VALKEY_TLS
+              value: "true"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
+            - name: ACCESS_TOKEN_EXPIRY_SECONDS
+              value: "120"
+            - name: REFRESH_TOKEN_EXPIRY_SECONDS
+              value: "3600"
+      volumes:
+        - $patch: replace
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-accounts-secrets

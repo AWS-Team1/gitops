@@ -1,0 +1,23 @@
+---
+# Source: bank-of-anthos/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boa-test-ingress
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /                # frontend만 외부(ALB)에 노출
+            pathType: Prefix        # 나머지 5개 서비스는 frontend를 통해서만 내부 통신
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 8080

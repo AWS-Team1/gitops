@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: transactionhistory
+spec:
+  template:
+    spec:
+      containers:
+        - name: transactionhistory
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-test-transactionhistory:sha-6681a79a9688212b93c2a230c5e0db37bf9b7671
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db-secret
+                  key: password
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://db.test.boa.internal:5432/ledgerdb"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "$(POSTGRES_USER)"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "$(POSTGRES_PASSWORD)"
+            - name: VALKEY_HOST
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_HOST}}
+            - name: VALKEY_PORT
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_PORT}}
+            - name: VALKEY_USERNAME
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: username}}
+            - name: VALKEY_PASSWORD
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
+            - name: VALKEY_TLS
+              value: "true"
+      volumes:
+        - $patch: replace
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-ledger-secrets
