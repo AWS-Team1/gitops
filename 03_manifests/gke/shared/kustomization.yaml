@@ -5,4 +5,5 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - secret-sync.yaml
+  - db-bootstrap.yaml
   - networkpolicy.yaml

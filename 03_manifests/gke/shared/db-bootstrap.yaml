@@ -1,0 +1,142 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bank-db-bootstrap
+---
+apiVersion: secrets-store.csi.x-k8s.io/v1
+kind: SecretProviderClass
+metadata:
+  name: bank-of-anthos-db-bootstrap-secrets
+spec:
+  provider: gke
+  parameters:
+    secrets: |
+      - resourceName: "projects/kdt4-1-506106/secrets/boa-database-bootstrap-password/versions/latest"
+        path: "bootstrap-password"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-bootstrap
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: db-bootstrap
+    spec:
+      restartPolicy: Never
+      serviceAccountName: bank-db-bootstrap
+      volumes:
+        - name: db-secrets
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-db-bootstrap-secrets
+      containers:
+        - name: bootstrap
+          image: postgres:16
+          env:
+            - name: PGHOST
+              value: db.gcp.boa.internal
+            - name: PGPORT
+              value: "5432"
+            - name: PGUSER
+              value: boa_bootstrap
+            - name: PGSSLMODE
+              value: require
+          volumeMounts:
+            - name: db-secrets
+              mountPath: /mnt/db-secrets
+              readOnly: true
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              PGPASSWORD=$(cat /mnt/db-secrets/bootstrap-password)
+              export PGPASSWORD
+              psql_admin() { psql -v ON_ERROR_STOP=1 --no-psqlrc -q "$@"; }
+
+              # Cloud SQL Admin API로 만든 built-in 사용자는 처음에
+              # cloudsqlsuperuser를 받으므로 앱 계정에서는 반드시 회수한다.
+              psql_admin -d postgres <<'EOSQL'
+              REVOKE cloudsqlsuperuser FROM accounts_app, ledger_app;
+              ALTER ROLE accounts_app NOCREATEDB NOCREATEROLE;
+              ALTER ROLE ledger_app NOCREATEDB NOCREATEROLE;
+              GRANT CONNECT ON DATABASE accountsdb TO accounts_app;
+              GRANT CONNECT ON DATABASE ledgerdb TO ledger_app;
+              GRANT CONNECT, CREATE ON DATABASE accountsdb TO dms_writer;
+              GRANT CONNECT, CREATE ON DATABASE ledgerdb TO dms_writer;
+              GRANT dms_writer TO boa_bootstrap;
+              EOSQL
+
+              grant_database() {
+                local database=$1 app_role=$2
+                psql_admin -d "$database" -v app_role="$app_role" <<'EOSQL'
+              GRANT USAGE, CREATE ON SCHEMA public TO dms_writer;
+              SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'app_role')\gexec
+              SET ROLE dms_writer;
+              SELECT format(
+                'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I',
+                :'app_role'
+              )\gexec
+              SELECT format(
+                'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I',
+                :'app_role'
+              )\gexec
+              SELECT format(
+                'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I',
+                :'app_role'
+              )\gexec
+              SELECT format(
+                'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I',
+                :'app_role'
+              )\gexec
+              RESET ROLE;
+              EOSQL
+              }
+
+              grant_database accountsdb accounts_app
+              grant_database ledgerdb ledger_app
+
+              psql_admin -d postgres -tAc \
+                "SELECT NOT pg_has_role('accounts_app', 'cloudsqlsuperuser', 'member')
+                   AND NOT pg_has_role('ledger_app', 'cloudsqlsuperuser', 'member')" \
+                | grep -qx t
+              echo "GCP database bootstrap complete"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-bootstrap-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: db-bootstrap
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.50.0.0/16
+      ports:
+        - port: 5432
+          protocol: TCP
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
