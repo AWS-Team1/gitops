@@ -30,3 +30,30 @@ patches:
       kind: NetworkPolicy
       name: transactionhistory-networkpolicy
     patch: *cloud-sql-egress
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: balancereader-networkpolicy
+    patch: &valkey-egress |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          to:
+            - ipBlock:
+                cidr: 10.10.48.0/29
+          ports:
+            - port: 6379
+              protocol: TCP
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: ledgerwriter-networkpolicy
+    patch: *valkey-egress
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: transactionhistory-networkpolicy
+    patch: *valkey-egress

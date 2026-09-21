@@ -14,6 +14,14 @@ spec:
               value: "gcp"
             - name: CLUSTER_NAME
               value: "boa-gke"
+            - name: VALKEY_HOST
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: host}}
+            - name: VALKEY_PORT
+              value: "6379"
+            - name: VALKEY_TLS
+              value: "false"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
       volumes:
         - $patch: replace
         - name: secrets-store

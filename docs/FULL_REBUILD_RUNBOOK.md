@@ -76,6 +76,7 @@ bash gitops/02_scripts/teardown-gke.sh --confirm
 | `terraform -chdir=Infra/aws-db-bootstrap destroy -target=aws_eks_pod_identity_association.db_bootstrap` | EKS에 묶인 association만 삭제 | Secret/IAM 유지 |
 | `terraform -chdir=Infra/aws-eks destroy` | EKS 삭제 | destroy complete |
 | `terraform -chdir=Infra/gcp-gke destroy` | GKE 삭제 | destroy complete |
+| `terraform -chdir=Infra/gcp-cache destroy` | GCP Valkey/PSC/endpoint Secret 삭제 | destroy complete |
 | `terraform -chdir=Infra/gcp-cloudsql apply -var='deletion_protection=false'` | Cloud SQL 삭제 보호 해제 | apply complete |
 | `terraform -chdir=Infra/gcp-cloudsql destroy -target=module.cloudsql -target=google_dns_record_set.database -target=google_dns_managed_zone.database -target=google_secret_manager_secret_version.accounts -target=google_secret_manager_secret_version.ledger -var='deletion_protection=false'` | Cloud SQL/DNS/비밀번호 버전 삭제, Secret 컨테이너 유지 | destroy complete |
 | `terraform -chdir=Infra/aws-rds destroy` | RDS 삭제 | destroy complete |
@@ -112,7 +113,8 @@ terraform -chdir=Infra/aws-ops apply & P4=$!
 terraform -chdir=Infra/gcp-cloudsql apply & P5=$!
 terraform -chdir=Infra/gcp-gke apply & P6=$!
 terraform -chdir=Infra/gcp-ops apply & P7=$!
-wait $P1 && wait $P2 && wait $P3 && wait $P4 && wait $P5 && wait $P6 && wait $P7
+terraform -chdir=Infra/gcp-cache apply & P8=$!
+wait $P1 && wait $P2 && wait $P3 && wait $P4 && wait $P5 && wait $P6 && wait $P7 && wait $P8
 ```
 
 그 다음 교차 의존 root를 순서대로 적용한다.
@@ -171,6 +173,8 @@ kubectl -n argocd get applications
 kubectl -n bank-of-anthos get deploy,hpa,secret
 terraform -chdir=Infra/aws-eks plan
 terraform -chdir=Infra/gcp-gke plan
+terraform -chdir=Infra/aws-cache plan
+terraform -chdir=Infra/gcp-cache plan
 ```
 
 각 클러스터의 Argo Application 5개가 `Synced/Healthy`이고 Terraform plan이
@@ -202,16 +206,17 @@ ORDER BY grantee, table_schema, table_name, privilege_type;
 Application Load Balancer를 만든다. Ingress IP는 고정하지 않으므로 클러스터를 재생성할
 때마다 새 `ADDRESS`를 확인해 `app.bespinglobal.site` A 레코드를 수동 갱신한다.
 
-### 5.3 Redis/Valkey — 현재 애플리케이션 연결 공백
+### 5.3 Redis/Valkey
 
-AWS Terraform은 `boa-valkey`와 `/boa/valkey/credentials`를 만들지만 EKS userservice
-매니페스트가 endpoint와 자격 증명을 사용하지 않는다. GKE userservice는 `REDIS_URL`이 빈
-값이고 GCP Redis 인프라도 없다. 따라서 현재 standby 상태는 정상이어도 active 전환 후
-회원가입 lock 기능은 정상 동작한다고 보장할 수 없다.
+AWS `aws-cache`는 ElastiCache Valkey와 자격 증명/runtime endpoint Secret을 만들고 EKS가
+TLS로 연결한다. GCP `gcp-cache`는 Memorystore for Valkey, PSC Subnet, endpoint Secret을
+만들고 GKE SecretSync가 endpoint를 동기화한다. 두 플랫폼 모두 Cache root를 클러스터 앱보다
+먼저 적용해야 한다.
 
-active 전환 전 AWS는 Valkey endpoint/TLS/Secret을 userservice에 연결하고, GCP는 Redis를
-별도로 구성하거나 회원가입을 의도적으로 비활성화한다. 이 항목이 해결되기 전에는 로그인
-확인만 가능하며 회원가입 성공을 재해복구 검증 기준으로 삼지 않는다.
+GCP는 private PSC 전용 경로에서 `AUTH_DISABLED`와 전송 암호화 비활성화를 사용한다. 현재
+Google provider 6.x와 애플리케이션의 정적 자격 증명 방식으로 IAM/token auth를 자동화할 수
+없기 때문이다. GCP에서 인증/TLS가 필수이면 앱에 Google IAM/token 갱신과 관리 CA trust를
+추가한 뒤 해당 옵션을 활성화한다.
 
 ## 6. AWS/GCP 흐름 차이
 
@@ -221,6 +226,7 @@ active 전환 전 AWS는 Valkey endpoint/TLS/Secret을 userservice에 연결하�
 | 이미지 저장소 | `aws-ops` state의 ECR, 보존 | 외부 GAR, 보존 |
 | DB 주소 | `db.boa.internal` Private Route53 | `db.gcp.boa.internal` Private Cloud DNS |
 | DB 앱 계정 | db-bootstrap Job이 role/schema/권한 생성 | Terraform이 로그인 사용자/Secret만 생성; schema/table 권한 자동화는 아직 없음 |
+| Cache | ElastiCache Serverless Valkey, TLS/RBAC | Memorystore for Valkey, private PSC |
 | Secret 동기화 | AWS CSI provider + sync Deployment | GKE SecretSync addon |
 | 앱 상태 | active, HPA 6개 | active, replicas=1, HPA 없음 |
 | 앱 노출 | Ingress가 ALB 생성 | GCE Ingress가 Application Load Balancer 생성; 재생성 후 DNS 수동 갱신 |

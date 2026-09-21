@@ -101,6 +101,7 @@ AWS JWT Secret이 EKS root와 함께 재생성되는 현재 구조에서는 `pre
 | CLI 명령어 | 목적 | 정상 결과 |
 |---|---|---|
 | `terraform -chdir=Infra/gcp-gke init && terraform -chdir=Infra/gcp-gke apply` | Secret Sync가 활성화된 GKE 재생성 | apply complete |
+| `terraform -chdir=Infra/gcp-cache init && terraform -chdir=Infra/gcp-cache apply` | GCP Valkey와 endpoint Secret 재생성 | apply complete |
 | `gcloud container clusters get-credentials boa-gke --region asia-northeast2 --project kdt4-1-506106` | kubectl을 새 GKE에 연결 | context 갱신 |
 | `export ARGOCD_REPO_USERNAME='<user>'; read -rs ARGOCD_REPO_PASSWORD; export ARGOCD_REPO_PASSWORD` | 비공개 Git 저장소 자격 증명 준비 | 환경변수 설정 |
 | `bash gitops/02_scripts/bootstrap-argocd-platform.sh gke` | JWT 재사용/생성, Argo CD 설치, standby 서비스 동기화 | Application 5개 Synced/Healthy, 앱 6개 replicas=0 |
@@ -112,7 +113,7 @@ GCP의 `prepare-jwt-gcp.sh`는 `boa-jwt-private`, `boa-jwt-public`을 조회한�
 | CLI 명령어 | 목적 | 정상 결과 |
 |---|---|---|
 | `kubectl -n argocd get applications` | Argo CD CD 상태 확인 | Root+Child 5개 모두 Synced/Healthy |
-| `kubectl -n bank-of-anthos get secret accounts-db-secret ledger-db-secret bank-app-jwt` | Secret 동기화 확인 | 세 Secret 존재 |
+| `kubectl -n bank-of-anthos get secret accounts-db-secret ledger-db-secret bank-app-jwt valkey-secret` | Secret 동기화 확인 | 네 Secret 존재 |
 | `kubectl -n bank-of-anthos get deploy,hpa` | 플랫폼별 실행 정책 확인 | EKS 앱 Ready/HPA 6개, GKE replicas=0/HPA 없음 |
 | `terraform -chdir=Infra/aws-eks plan` 또는 `terraform -chdir=Infra/gcp-gke plan` | Terraform drift 확인 | `No changes` |
 
@@ -120,4 +121,3 @@ GCP의 `prepare-jwt-gcp.sh`는 `boa-jwt-private`, `boa-jwt-public`을 조회한�
 
 1. `aws-db-bootstrap`의 Pod Identity Association만 EKS 수명주기에 묶여 있다. 위 targeted destroy/apply가 현재 최소 안전 절차다. 이 수동 단계를 없앨 때만 association을 별도 root로 옮긴다.
 2. 이 절차는 DB 재생성을 보장하지 않는다. GCP 매니페스트의 Cloud SQL 사설 IP와 AWS RDS master Secret ARN은 DB를 유지한다는 전제다.
-3. Redis는 아직 GitOps에 연결되지 않았다. 현재 회원가입 분산 락은 Redis가 없으면 실패하도록 구현되어 있으므로 실제 활성화 전 별도 Redis 인프라·Secret·NetworkPolicy가 필요하다.

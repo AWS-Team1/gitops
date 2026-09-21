@@ -23,6 +23,12 @@ spec:
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "$(POSTGRES_PASSWORD)"
+            - name: VALKEY_HOST
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: host}}
+            - name: VALKEY_PORT
+              value: "6379"
+            - name: VALKEY_TLS
+              value: "false"
       volumes:
         - $patch: replace
         - name: secrets-store

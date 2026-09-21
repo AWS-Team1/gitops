@@ -19,6 +19,14 @@ spec:
                   key: password
             - name: ACCOUNTS_DB_URI
               value: "postgresql+psycopg2://$(POSTGRES_USER)@10.50.1.5:5432/accountsdb"
+            - name: VALKEY_HOST
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: host}}
+            - name: VALKEY_PORT
+              value: "6379"
+            - name: VALKEY_TLS
+              value: "false"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
       volumes:
         - $patch: replace
         - name: secrets-store

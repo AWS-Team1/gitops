@@ -413,7 +413,7 @@ foreach ($deployment in $DB_DEPLOYMENTS) {
     ACCOUNTS_DB_URI-
 }
 
-# Redis는 선택 기능이다. 과거 Deployment에 남은 값이 있으면 앱이 없는 redis Service를 호출한다.
+# 과거 수동 배포의 REDIS_URL만 제거한다. GitOps는 관리형 Valkey용 VALKEY_*를 다시 주입한다.
 kubectl set env deployment/userservice `
   --namespace=bank-of-anthos `
   REDIS_URL-
