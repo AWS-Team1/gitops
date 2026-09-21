@@ -12,6 +12,8 @@ spec:
           env:
             - name: ENV_PLATFORM
               value: "gcp"
+            - name: CLUSTER_NAME
+              value: "boa-gke"
       volumes:
         - $patch: replace
         - name: secrets-store
