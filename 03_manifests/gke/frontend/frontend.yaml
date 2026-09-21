@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-frontend:sha-c8925a18c714725c972d644c1909da7e7907afda
+          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-frontend:sha-b0b12144a678831c3c67cb95fd7122a63a4aaaae
           env:
             - name: ENV_PLATFORM
               value: "gcp"
