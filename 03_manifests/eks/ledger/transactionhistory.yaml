@@ -23,7 +23,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: transactionhistory
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-transactionhistory:sha-20de9fe09273d0fc3a64e6da579771cb5bd43dbc
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-transactionhistory:sha-6681a79a9688212b93c2a230c5e0db37bf9b7671
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
