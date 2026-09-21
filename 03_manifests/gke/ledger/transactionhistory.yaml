@@ -1,50 +1,15 @@
----
-# Source: bank-of-anthos/templates/transactionhistory/deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: transactionhistory
 spec:
-  selector:
-    matchLabels:
-      app: transactionhistory
+  replicas: 0
   template:
-    metadata:
-      labels:
-        app: transactionhistory
     spec:
-      serviceAccountName: bank-of-anthos
-      affinity:
-        podAntiAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  app: transactionhistory
-              topologyKey: kubernetes.io/hostname
       containers:
         - name: transactionhistory
           image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-transactionhistory:sha-6681a79a9688212b93c2a230c5e0db37bf9b7671
-          imagePullPolicy: IfNotPresent
-          ports:
-            - containerPort: 8080
           env:
-            - name: VERSION
-              value: "1.0"
-            - name: PORT
-              value: "8080"
-            - name: ENABLE_TRACING
-              value: "false"
-            - name: POLL_MS
-              value: "100"
-            - name: CACHE_SIZE
-              value: "1000000"
-            - name: HISTORY_LIMIT
-              value: "100"
-            - name: LOCAL_ROUTING_NUM
-              value: "883745000"
-            - name: PUB_KEY_PATH
-              value: /tmp/.ssh/jwtRS256.key.pub
-            # Ledger 전용 로그인 role. 비밀번호만 SecretSync로 동기화한다.
             - name: POSTGRES_USER
               value: "ledger_app"
             - name: POSTGRES_PASSWORD
@@ -58,69 +23,11 @@ spec:
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "$(POSTGRES_PASSWORD)"
-            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
-              value: "3"
-          volumeMounts:
-            - name: secrets-store
-              mountPath: /tmp/.ssh
-              readOnly: true
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
       volumes:
+        - $patch: replace
         - name: secrets-store
           secret:
             secretName: bank-app-jwt
             items:
               - key: jwtRS256.key.pub
                 path: jwtRS256.key.pub
----
-# Source: bank-of-anthos/templates/transactionhistory/service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: transactionhistory
-spec:
-  selector:
-    app: transactionhistory
-  ports:
-    - protocol: TCP
-      port: 8080
-      targetPort: 8080
-  type: ClusterIP
----
-# Source: bank-of-anthos/templates/transactionhistory/networkpolicy.yaml
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: transactionhistory-networkpolicy
-spec:
-  podSelector:
-    matchLabels:
-      app: transactionhistory
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app: frontend
-      ports:
-        - port: 8080
-  egress:
-    # Cloud SQL private IP
-    - to:
-        - ipBlock:
-            cidr: 10.50.1.5/32
-      ports:
-        - port: 5432
-    - ports:
-        - port: 53
-          protocol: UDP
-        - port: 53
-          protocol: TCP

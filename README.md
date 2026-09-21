@@ -1,7 +1,8 @@
 # Bank of Anthos GitOps
 
-EKS용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
-AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terraform이 소유합니다.
+EKS/GKE용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
+공통 애플리케이션 리소스는 Kustomize base에 두고 클라우드별 설정만 overlay에서 관리합니다.
+GKE overlay는 컷오버 전 standby 구성이며 6개 Deployment를 `replicas: 0`으로 유지합니다.
 
 현재 브랜치의 설치·검증 순서는
 [`docs/EKS_GITOPS_CICD_RUNBOOK.md`](docs/EKS_GITOPS_CICD_RUNBOOK.md)를 따릅니다.
@@ -23,14 +24,22 @@ AWS 인프라(VPC, EKS, RDS, IAM, ECR, AWS Load Balancer Controller)는 Terrafor
 ├── verify-argocd.sh
 └── teardown-cluster.sh
 03_manifests/
-└── eks/
-    ├── kustomization.yaml       # 전체 리소스 렌더링/검증용
-    ├── argocd-exposure/         # ops ALB TargetGroupBinding
-    ├── applications/            # AppProject + child Applications
-    ├── shared/                  # Namespace, SA, secrets, DB bootstrap, HPA
-    ├── accounts/                # userservice, contacts
-    ├── ledger/                  # balancereader, ledgerwriter, transactionhistory
-    └── frontend/                # frontend, ALB Ingress
+├── base/                         # 공통 Deployment, Service, NetworkPolicy
+│   ├── accounts/
+│   ├── ledger/
+│   └── frontend/
+├── eks/                          # AWS 이미지, RDS, CSI, ALB overlay
+│   ├── applications/
+│   ├── shared/
+│   ├── accounts/
+│   ├── ledger/
+│   └── frontend/
+└── gke/                          # Artifact Registry, Cloud SQL, SecretSync, LB overlay
+    ├── applications/
+    ├── shared/
+    ├── accounts/
+    ├── ledger/
+    └── frontend/
 manual/eks/
 ├── *.yaml                    # 최초 서비스/HPA 수동 배포용 전체 YAML
 ├── argocd-exposure/           # Argo CD UI ALB 연결 수동 YAML
@@ -58,8 +67,10 @@ Root Application은 `applications/`를 읽고, child Application이 `shared`,
 
 ```bash
 kubectl kustomize 03_manifests/eks
+kubectl kustomize 03_manifests/gke
 kubectl apply --dry-run=server -f manual/eks/argocd-exposure/targetgroupbinding.yaml
 kubectl kustomize 03_manifests/eks/applications
+kubectl kustomize 03_manifests/gke/applications
 kubectl -n argocd get applications
 ```
 

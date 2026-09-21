@@ -418,12 +418,9 @@ kubectl set env deployment/userservice `
   --namespace=bank-of-anthos `
   REDIS_URL-
 
-# 2026-09-21 최초 적용에서 생성된 중복 HPA가 있을 때만 제거한다.
-kubectl delete hpa `
-  frontend-hpa userservice-hpa contacts-hpa `
-  ledgerwriter-hpa balancereader-hpa transactionhistory-hpa `
-  --namespace=bank-of-anthos `
-  --ignore-not-found
+# GKE는 컷오버 전 standby이므로 Pod를 다시 늘리는 HPA를 두지 않는다.
+kubectl delete hpa --all `
+  --namespace=bank-of-anthos
 
 kubectl apply --server-side --force-conflicts -k 03_manifests/gke
 ```
@@ -431,7 +428,8 @@ kubectl apply --server-side --force-conflicts -k 03_manifests/gke
 ### 목적
 
 기존 수동 Deployment에 남아 있는 `bank-app-runtime` 환경변수를 최초 한 번 제거한 뒤,
-AWS와 같은 앱 설정을 GKE 리소스로 전환한다. 이후에는 GitOps 매니페스트만 관리한다.
+GKE 앱을 `replicas: 0`인 standby 리소스로 전환한다. SecretSync, Service, DB 연결 설정은
+유지하지만 컷오버 전에는 앱 Pod와 HPA를 실행하지 않는다.
 
 ### 실행 후 결과
 
@@ -440,10 +438,14 @@ kubectl get deployment,pod,hpa -n bank-of-anthos
 kubectl get service frontend -n bank-of-anthos
 ```
 
-6개 Deployment와 HPA가 표시되고 각 Deployment의 READY가 `2/2`가 되어야 한다.
-`frontend` Service의 `EXTERNAL-IP`는 GKE LoadBalancer 준비 후 값이 표시된다.
+6개 Deployment의 READY가 모두 `0/0`이고 Pod와 HPA가 없어야 한다.
+`frontend` Service와 `EXTERNAL-IP`는 빠른 전환을 위해 유지되지만 endpoint는 비어 있어야 한다.
 
-## 10. 로그인 장애 확인 및 복구
+## 10. 로그인 장애 확인 및 복구 기록
+
+기본 GKE 상태는 `replicas: 0`이므로 이 절차를 평상시에 실행하지 않는다. 컷오버 검증을 위해
+Deployment를 활성화했는데 로그인이 실패할 때만 사용한다. 검증 후에는 Git의 GKE overlay를
+다시 `replicas: 0`으로 유지하고 HPA가 없는지 확인한다.
 
 ### CLI 명령어
 

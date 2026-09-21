@@ -2,6 +2,33 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: bank-of-anthos
 resources:
-  - balancereader.yaml
-  - ledgerwriter.yaml
-  - transactionhistory.yaml
+  - ../../base/ledger
+patches:
+  - path: balancereader.yaml
+  - path: ledgerwriter.yaml
+  - path: transactionhistory.yaml
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: balancereader-networkpolicy
+    patch: &rds-egress |-
+      - op: replace
+        path: /spec/egress/0/to
+        value:
+          - ipBlock:
+              cidr: 192.168.16.0/24
+          - ipBlock:
+              cidr: 192.168.17.0/24
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: ledgerwriter-networkpolicy
+    patch: *rds-egress
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: transactionhistory-networkpolicy
+    patch: *rds-egress

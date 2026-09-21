@@ -15,11 +15,6 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: bank-of-anthos
-  ignoreDifferences:
-    - group: apps
-      kind: Deployment
-      jsonPointers:
-        - /spec/replicas
   syncPolicy:
     automated:
       prune: true
@@ -28,7 +23,6 @@ spec:
     syncOptions:
       - PruneLast=true
       - ApplyOutOfSyncOnly=true
-      - RespectIgnoreDifferences=true
       - ServerSideApply=true
     retry:
       limit: 5

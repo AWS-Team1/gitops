@@ -1,0 +1,109 @@
+---
+# Source: bank-of-anthos/templates/balancereader/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balancereader
+spec:
+  selector:
+    matchLabels:
+      app: balancereader
+  template:
+    metadata:
+      labels:
+        app: balancereader
+    spec:
+      serviceAccountName: bank-of-anthos
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: balancereader
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: balancereader
+          image: boa-balancereader:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VERSION
+              value: "1.0"
+            - name: PORT
+              value: "8080"
+            - name: ENABLE_TRACING
+              value: "false"
+            - name: POLL_MS
+              value: "100"
+            - name: CACHE_SIZE
+              value: "1000000"
+            - name: LOCAL_ROUTING_NUM
+              value: "883745000"
+            - name: PUB_KEY_PATH
+              value: /tmp/.ssh/jwtRS256.key.pub
+            - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
+              value: "3"
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /tmp/.ssh
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: secrets-store
+          emptyDir: {}
+---
+# Source: bank-of-anthos/templates/balancereader/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: balancereader
+spec:
+  selector:
+    app: balancereader
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# Source: bank-of-anthos/templates/balancereader/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: balancereader-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: balancereader
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+        - podSelector:
+            matchLabels:
+              app: ledgerwriter          # 송금 전 잔액 확인 호출
+      ports:
+        - port: 8080
+  egress:
+    # Platform overlay replaces the database destination.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/32
+      ports:
+        - port: 5432
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

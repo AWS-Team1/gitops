@@ -6,4 +6,3 @@ resources:
   - serviceaccount.yaml
   - secret-sync.yaml
   - networkpolicy.yaml
-  - hpa.yaml
