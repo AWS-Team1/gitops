@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Terraform output으로 수동 배포용 AWS 런타임 값만 갱신한다.
+# Terraform output으로 AWS 런타임 값을 갱신한다. 기본은 수동 배포 YAML만 대상이다.
 set -Eeuo pipefail
 
-usage() { echo "Usage: $0 --infra-root /absolute/path/to/Infra"; }
+usage() { echo "Usage: $0 --infra-root /absolute/path/to/Infra [--gitops]"; }
 INFRA_ROOT=""
 # 명시적으로 전달된 Infra 저장소만 읽어 다른 Terraform 상태를 참조하지 않게 한다.
+RENDER_GITOPS=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --infra-root) INFRA_ROOT=${2:?경로가 필요합니다}; shift 2 ;;
+    --gitops) RENDER_GITOPS=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; exit 2 ;;
   esac
@@ -25,6 +27,7 @@ DB_ROOT="$INFRA_ROOT/aws-db-bootstrap"
 EXPECTED_ACCOUNT=769413326616
 TGB_FILE="$REPO_ROOT/manual/eks/argocd-exposure/targetgroupbinding.yaml"
 SECRETS_FILE="$REPO_ROOT/manual/eks/secrets.yaml"
+GITOPS_SECRETS_FILE="$REPO_ROOT/03_manifests/eks/shared/secrets.yaml"
 
 [[ -d "$OPS_ROOT" && -d "$DB_ROOT" ]] || { echo "ERROR: Infra root 경로가 올바르지 않습니다: $INFRA_ROOT" >&2; exit 1; }
 
@@ -43,12 +46,17 @@ rds_master_secret_arn=$(terraform -chdir="$DB_ROOT" output -raw rds_master_secre
 [[ $(grep -Ec '^[[:space:]]*groupID:' "$TGB_FILE") -eq 1 ]]
 [[ $(grep -Ec 'objectName: "arn:aws:secretsmanager:.*:secret:rds!db-' "$SECRETS_FILE") -eq 1 ]]
 
-# GitOps 선언값이 아닌 최초 수동 배포용 매니페스트만 현재 인프라 값으로 갱신한다.
+# 최초 수동 배포용 매니페스트를 갱신하고, 요청된 경우 GitOps 선언값도 함께 갱신한다.
 sed -i -E "s|^([[:space:]]*targetGroupARN:).*|\1 $target_group_arn # render-aws-runtime.sh로 갱신|" "$TGB_FILE"
 sed -i -E "s|^([[:space:]]*groupID:).*|\1 $alb_security_group_id # render-aws-runtime.sh로 갱신|" "$TGB_FILE"
 sed -i -E "s|^([[:space:]]*- objectName:) \"arn:aws:secretsmanager:.*:secret:rds!db-[^\"]+\".*|\1 \"$rds_master_secret_arn\" # render-aws-runtime.sh로 갱신|" "$SECRETS_FILE"
 
-echo "수동 배포용 AWS 런타임 값 갱신 완료:"
+if [[ "$RENDER_GITOPS" == true ]]; then
+  [[ $(grep -Ec 'objectName: "arn:aws:secretsmanager:.*:secret:rds!db-' "$GITOPS_SECRETS_FILE") -eq 1 ]]
+  sed -i -E "s|^([[:space:]]*- objectName:) \"arn:aws:secretsmanager:.*:secret:rds!db-[^\"]+\".*|\1 \"$rds_master_secret_arn\" # render-aws-runtime.sh로 갱신|" "$GITOPS_SECRETS_FILE"
+fi
+
+echo "AWS 런타임 값 갱신 완료:"
 echo "  $TGB_FILE"
 echo "  $SECRETS_FILE"
-echo "03_manifests 값은 변경하지 않았습니다."
+[[ "$RENDER_GITOPS" == true ]] && echo "  $GITOPS_SECRETS_FILE"
