@@ -3,6 +3,10 @@ set -Eeuo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 VALUES_FILE="$SCRIPT_DIR/../01_bootstrap/argocd-values.yaml"
+VALUES_ARGS=(--values "$VALUES_FILE")
+if [[ -n ${ARGOCD_PLATFORM_VALUES_FILE:-} ]]; then
+  VALUES_ARGS+=(--values "$ARGOCD_PLATFORM_VALUES_FILE")
+fi
 
 # ⭐ 지금 어느 클러스터에 설치하는지 확인 — 엉뚱한 클러스터 사고 방지
 kubectl config current-context
@@ -16,7 +20,7 @@ helm repo update argo
 # ArgoCD 설치 (없으면 설치, 있으면 업그레이드 / 실패 시 --atomic으로 자동 롤백)
 helm upgrade --install argocd argo/argo-cd -n argocd --create-namespace \
   --version 10.4.0 \
-  --values "$VALUES_FILE" \
+  "${VALUES_ARGS[@]}" \
   --atomic --timeout 10m
 
 # argocd-server 파드가 Ready 될 때까지 대기
