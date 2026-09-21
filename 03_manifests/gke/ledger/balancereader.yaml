@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: balancereader
 spec:
-  replicas: 0
+  replicas: 1
   template:
     spec:
       containers:

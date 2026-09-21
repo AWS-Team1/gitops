@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: transactionhistory
 spec:
-  replicas: 0
+  replicas: 1
   template:
     spec:
       containers:
