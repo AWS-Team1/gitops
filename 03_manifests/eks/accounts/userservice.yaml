@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: userservice
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-9b9dbb44d7375e5cf0f2ebab87616ac8885bc5dd
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-1343dad73d81dac8a5764f95a377086526efc043
           env:
             - name: POSTGRES_USER
               valueFrom:
