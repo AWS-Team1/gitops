@@ -35,6 +35,10 @@ spec:
               valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
             - name: VALKEY_TLS
               value: "true"
+            - name: BALANCE_CACHE_TTL_SECONDS
+              value: "5"
+            - name: BALANCE_CACHE_JITTER_SECONDS
+              value: "1"
       volumes:
         - $patch: replace
         - name: secrets-store
