@@ -11,6 +11,8 @@ spec:
           env:
             - name: ENV_PLATFORM
               value: "aws"
+            - name: CLUSTER_NAME
+              value: "boa-eks"
       volumes:
         - $patch: replace
         - name: secrets-store
