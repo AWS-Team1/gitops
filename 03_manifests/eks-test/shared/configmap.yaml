@@ -10,5 +10,5 @@ data:
   DB_HOST: db.test.boa.internal
   DB_PORT: "5432"
   DB_NAME: boadb
-  VALKEY_HOST: REPLACE_WITH_ELASTICACHE_ENDPOINT
+  VALKEY_HOST: boa-test-valkey-qkkgxc.serverless.apn2.cache.amazonaws.com
   VALKEY_PORT: "6379"
