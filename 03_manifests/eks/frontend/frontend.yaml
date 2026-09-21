@@ -13,6 +13,18 @@ spec:
               value: "aws"
             - name: CLUSTER_NAME
               value: "boa-eks"
+            - name: VALKEY_HOST
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: host}}
+            - name: VALKEY_PORT
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_PORT}}
+            - name: VALKEY_USERNAME
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: username}}
+            - name: VALKEY_PASSWORD
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
+            - name: VALKEY_TLS
+              value: "true"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
       volumes:
         - $patch: replace
         - name: secrets-store

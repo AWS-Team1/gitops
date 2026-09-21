@@ -19,3 +19,20 @@ patches:
               cidr: 192.168.2.0/24
           - ipBlock:
               cidr: 192.168.3.0/24
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: frontend-networkpolicy
+    patch: |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          to:
+            - ipBlock:
+                cidr: 192.168.24.0/24
+            - ipBlock:
+                cidr: 192.168.25.0/24
+          ports:
+            - port: 6379
+              protocol: TCP
