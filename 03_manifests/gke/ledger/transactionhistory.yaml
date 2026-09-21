@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: transactionhistory
-          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-transactionhistory:sha-c2853726f19ad8da481ee88c7ff11d0b47e7aa3c
+          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-transactionhistory:sha-c4e38dfb9b9a08a8a2cd06fa445f4cd8d66a7389
           env:
             - name: POSTGRES_USER
               value: "ledger_app"
