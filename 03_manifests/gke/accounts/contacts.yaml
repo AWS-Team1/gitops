@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: contacts
-          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-contacts:sha-1343dad73d81dac8a5764f95a377086526efc043
+          image: asia-northeast2-docker.pkg.dev/kdt4-1-506106/bank-of-anthos/boa-contacts:sha-8c627b15d0b6481879a560a7bfddf265d148420c
           env:
             - name: POSTGRES_USER
               value: "accounts_app"
