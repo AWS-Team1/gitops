@@ -18,6 +18,8 @@ spec:
               value: "aws"
             - name: CLUSTER_NAME
               value: "boa-eks"
+            - name: SCHEME
+              value: "https"
             - name: VALKEY_HOST
               valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_HOST}}
             - name: VALKEY_PORT
