@@ -162,15 +162,10 @@ GCP 변수는 파일에 저장하지 않고 현재 셸에서만 넘긴다. `dms_
 `dms_writer` 계정 생성에 필요하지만 화면이나 Git에 출력하지 않는다.
 
 ```bash
-export TF_VAR_gcp_project_id=kdt4-1-506106
-export TF_VAR_region=asia-northeast2
+GCP_PROJECT_ID=kdt4-1-506106
 
 read -rs -p 'GCP DMS password: ' TF_VAR_dms_password; echo
 export TF_VAR_dms_password
-
-GCP_OPERATOR_IP=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')
-[[ "$GCP_OPERATOR_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]
-export TF_VAR_master_authorized_cidrs='[{"cidr_block":"'"$GCP_OPERATOR_IP"'/32","display_name":"code-server"}]'
 
 apply_root gcp-core
 
@@ -179,9 +174,9 @@ terraform -chdir=Infra/gcp-cloudsql init -reconfigure -input=false
 adopt_gcp_secret() {
   resource=$1 name=$2
   terraform -chdir=Infra/gcp-cloudsql state list | grep -Fxq "$resource" && return 0
-  gcloud secrets describe "$name" --project="$TF_VAR_gcp_project_id" >/dev/null 2>&1 || return 0
+  gcloud secrets describe "$name" --project="$GCP_PROJECT_ID" >/dev/null 2>&1 || return 0
   terraform -chdir=Infra/gcp-cloudsql import "$resource" \
-    "projects/$TF_VAR_gcp_project_id/secrets/$name"
+    "projects/$GCP_PROJECT_ID/secrets/$name"
 }
 adopt_gcp_secret 'google_secret_manager_secret.app_database["accounts"]' boa-database-accounts
 adopt_gcp_secret 'google_secret_manager_secret.app_database["ledger"]' boa-database-ledger
@@ -450,10 +445,7 @@ Windows PowerShell에서 인계받을 때는 Bash의 `export`, `\` 줄 연장, `
 ```powershell
 gcloud auth login ba016@bespin.email --force --update-adc
 $env:AWS_PROFILE='team1'
-$env:TF_VAR_gcp_project_id='kdt4-1-506106'
-$env:TF_VAR_region='asia-northeast2'
-$operatorIp=(Invoke-RestMethod 'https://checkip.amazonaws.com').Trim()
-$env:TF_VAR_master_authorized_cidrs='[{"cidr_block":"' + $operatorIp + '/32","display_name":"operator"}]'
+gcloud config set project kdt4-1-506106
 ```
 
 GKE 생성 후 `secretsyncs.secret-sync.gke.io` CRD가 없다면 Infra 코드의

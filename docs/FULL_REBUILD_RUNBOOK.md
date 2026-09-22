@@ -27,12 +27,13 @@ RDS와 Cloud SQL 데이터는 삭제된다. AWS RDS는 최종 snapshot을 남기
 AWS 기존 VPC, Route53 Zone, ACM 인증서, Key Pair가 없으면 현재 AWS Terraform은
 처음부터 생성할 수 없다. 이는 의도된 외부 기반 자원이다.
 
-각 Terraform root의 `.tfvars`를 준비한다.
+Secret이 필요한 Terraform root의 `.tfvars`를 준비한다.
 
 - `aws-eks`: Code Server IAM role
-- `gcp-core`, `gcp-gke`, `gcp-cloudsql`, `gcp-ops`, `net-link`: GCP project/오사카 리전 및 네트워크 값
 - `gcp-cloudsql`, `aws-dms`: 동일한 `dms_writer` 비밀번호
 - `net-link`: VPN PSK 4개
+
+GCP project/리전과 GKE API 허용 CIDR은 코드서버 기준 기본값을 사용한다.
 
 기존 GCP DB Secret을 처음 Terraform state에 편입하는 경우 컨테이너만 한 번 import한다.
 새 Secret version은 다음 apply가 Cloud SQL 사용자와 같은 비밀번호로 생성한다.
@@ -76,8 +77,7 @@ bash gitops/02_scripts/teardown-gke.sh --confirm
 | `terraform -chdir=Infra/aws-db-bootstrap destroy -target=aws_eks_pod_identity_association.db_bootstrap` | EKS에 묶인 association만 삭제 | Secret/IAM 유지 |
 | `terraform -chdir=Infra/aws-eks destroy` | EKS 삭제 | destroy complete |
 | `terraform -chdir=Infra/gcp-gke destroy` | GKE 삭제 | destroy complete |
-| `terraform -chdir=Infra/gcp-cloudsql apply -var='deletion_protection=false'` | Cloud SQL 삭제 보호 해제 | apply complete |
-| `terraform -chdir=Infra/gcp-cloudsql destroy -target=module.cloudsql -target=google_dns_record_set.database -target=google_dns_managed_zone.database -target=google_secret_manager_secret_version.accounts -target=google_secret_manager_secret_version.ledger -var='deletion_protection=false'` | Cloud SQL/DNS/비밀번호 버전 삭제, Secret 컨테이너 유지 | destroy complete |
+| `terraform -chdir=Infra/gcp-cloudsql destroy -target=module.cloudsql -target=google_dns_record_set.database -target=google_dns_managed_zone.database -target=google_secret_manager_secret_version.accounts -target=google_secret_manager_secret_version.ledger` | Cloud SQL/DNS/비밀번호 버전 삭제, Secret 컨테이너 유지 | destroy complete |
 | `terraform -chdir=Infra/aws-rds destroy` | RDS 삭제 | destroy complete |
 | `terraform -chdir=Infra/aws-cache destroy` | Valkey 삭제 | destroy complete |
 | `terraform -chdir=Infra/gcp-ops destroy` | GCP Argo IP/DNS 삭제 | destroy complete |

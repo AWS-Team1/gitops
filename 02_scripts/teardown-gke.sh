@@ -4,6 +4,7 @@ set -Eeuo pipefail
 
 ARGOCD_NAMESPACE=argocd
 APP_NAMESPACE=bank-of-anthos
+APP_INGRESS=boa-ingress
 TIMEOUT=${TIMEOUT:-15m}
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -24,7 +25,8 @@ if [[ -n "$CONTROLLER" ]]; then
   kubectl -n "$ARGOCD_NAMESPACE" rollout status statefulset "$CONTROLLER" --timeout="$TIMEOUT"
 fi
 
-# 삭제 완료까지 기다리면 GKE 컨트롤러의 forwarding rule/backend 정리도 끝난다.
+# Ingress를 먼저 지워야 GKE 컨트롤러가 forwarding rule/backend를 회수한다.
+kubectl -n "$APP_NAMESPACE" delete ingress "$APP_INGRESS" --ignore-not-found --wait --timeout="$TIMEOUT"
 kubectl -n "$APP_NAMESPACE" delete service frontend --ignore-not-found --wait --timeout="$TIMEOUT"
 kubectl -n "$ARGOCD_NAMESPACE" delete ingress argocd-gcp --ignore-not-found --wait --timeout="$TIMEOUT"
 kubectl -n "$ARGOCD_NAMESPACE" delete managedcertificate argocd-gcp --ignore-not-found --wait --timeout="$TIMEOUT"
