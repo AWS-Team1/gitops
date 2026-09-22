@@ -42,8 +42,12 @@ for tool in aws gcloud terraform kubectl helm git openssl curl jq; do
   command -v "$tool" >/dev/null || exit 1
 done
 
-export AWS_PROFILE=team1
 export AWS_REGION=ap-northeast-2
+if aws configure list-profiles | grep -Fxq team1; then
+  export AWS_PROFILE=team1
+else
+  unset AWS_PROFILE
+fi
 test "$(aws sts get-caller-identity --query Account --output text)" = "769413326616"
 gcloud auth application-default print-access-token >/dev/null
 gcloud config set project kdt4-1-506106
@@ -65,6 +69,11 @@ for root in \
   terraform -chdir="Infra/$root" init -backend=false -input=false
   terraform -chdir="Infra/$root" validate
 done
+
+# 반복 구축에 필요한 GCP 수정이 Infra/dev에 들어왔는지 확인한다.
+grep -q 'edition.*=.*"ENTERPRISE"' Infra/gcp-modules/cloudsql/main.tf
+grep -q 'secret_sync_config' Infra/gcp-modules/gke/main.tf
+grep -q 'total_min_node_count' Infra/gcp-modules/gke/main.tf
 
 for dir in $(find gitops -name kustomization.yaml -printf '%h\n' | sort -u); do
   kubectl kustomize "$dir" >/dev/null
@@ -164,6 +173,19 @@ GCP_OPERATOR_IP=$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')
 export TF_VAR_master_authorized_cidrs='[{"cidr_block":"'"$GCP_OPERATOR_IP"'/32","display_name":"code-server"}]'
 
 apply_root gcp-core
+
+# destroy 뒤에도 보존한 Secret Manager 컨테이너는 삭제하지 말고 state에 채택한다.
+terraform -chdir=Infra/gcp-cloudsql init -reconfigure -input=false
+adopt_gcp_secret() {
+  resource=$1 name=$2
+  terraform -chdir=Infra/gcp-cloudsql state list | grep -Fxq "$resource" && return 0
+  gcloud secrets describe "$name" --project="$TF_VAR_gcp_project_id" >/dev/null 2>&1 || return 0
+  terraform -chdir=Infra/gcp-cloudsql import "$resource" \
+    "projects/$TF_VAR_gcp_project_id/secrets/$name"
+}
+adopt_gcp_secret 'google_secret_manager_secret.app_database["accounts"]' boa-database-accounts
+adopt_gcp_secret 'google_secret_manager_secret.app_database["ledger"]' boa-database-ledger
+
 apply_root gcp-cloudsql
 apply_root gcp-ops
 apply_root gcp-gke
@@ -177,6 +199,31 @@ Root Application 적용 전에 GCP Console의 Cloud SQL Studio에서 `accountsdb
 기존 Cloud SQL과 권한을 유지한 재구축이면 이 단계는 생략한다.
 
 이 런북에서는 `aws-cache`, GCP Valkey root, `net-link`, `aws-dms`를 실행하지 않는다.
+
+### 3.3 GCP 재구축 오류 복구
+
+`gcp-core`가 기존 PSA 연결의 예전 range 이름 때문에 `Cannot modify allocated ranges`
+오류로 끝났다면 새 Terraform range를 기존 연결에 붙이고 state에 채택한다.
+
+```bash
+gcloud services vpc-peerings update \
+  --network=boa-vpc \
+  --ranges=boa-psa-range \
+  --service=servicenetworking.googleapis.com \
+  --project=kdt4-1-506106 \
+  --force
+
+terraform -chdir=Infra/gcp-core import \
+  'module.network.google_service_networking_connection.psa' \
+  'projects/kdt4-1-506106/global/networks/boa-vpc:servicenetworking.googleapis.com'
+
+apply_root gcp-core
+```
+
+Cloud SQL plan에는 `settings.edition = "ENTERPRISE"`가 있어야 한다. PostgreSQL 16의
+기본값인 Enterprise Plus는 `db-custom-1-3840`을 허용하지 않는다. 기존
+`boa-database-accounts`, `boa-database-ledger`가 409를 내면 삭제하지 말고 위의
+`adopt_gcp_secret`으로 import한다.
 
 ## 4. Argo CD 선설치
 
@@ -370,6 +417,49 @@ terraform -chdir=Infra/gcp-gke plan -detailed-exitcode
 
 Terraform의 정상 종료 코드는 변경 없음일 때 `0`, 변경이 남았을 때 `2`다. 마지막 plan에서
 `2`가 나오면 내용을 확인하고, 바로 추가 apply하지 않는다.
+
+## 8. 코드 서버 단절 시 로컬 복구
+
+apply 중 SSH가 끊겨도 같은 root를 바로 다시 실행하지 않는다. 먼저 기존 Terraform
+프로세스와 실제 클라우드 작업 상태를 확인한다. 프로세스가 살아 있으면 기다린다.
+
+```bash
+pgrep -af 'terraform.*gcp-gke'
+gcloud container clusters describe boa-gke \
+  --region asia-northeast2 \
+  --project kdt4-1-506106 \
+  --format='yaml(name,status,endpoint)'
+```
+
+코드 서버를 재부팅했거나 프로세스 종료를 확인한 뒤에만 오류에 표시된 lock ID를
+해제한다. 클러스터와 서비스 계정은 생성됐지만 state가 비었다면 두 리소스를 먼저
+import하고 plan으로 나머지만 생성한다.
+
+```bash
+terraform -chdir=Infra/gcp-gke force-unlock -force '<LOCK_ID>'
+terraform -chdir=Infra/gcp-gke import google_service_account.gke_node \
+  'projects/kdt4-1-506106/serviceAccounts/boa-gke-node@kdt4-1-506106.iam.gserviceaccount.com'
+terraform -chdir=Infra/gcp-gke import module.gke.google_container_cluster.main \
+  'projects/kdt4-1-506106/locations/asia-northeast2/clusters/boa-gke'
+apply_root gcp-gke
+```
+
+Windows PowerShell에서 인계받을 때는 Bash의 `export`, `\` 줄 연장, `/tmp` 경로를
+사용하지 않는다.
+
+```powershell
+gcloud auth login ba016@bespin.email --force --update-adc
+$env:AWS_PROFILE='team1'
+$env:TF_VAR_gcp_project_id='kdt4-1-506106'
+$env:TF_VAR_region='asia-northeast2'
+$operatorIp=(Invoke-RestMethod 'https://checkip.amazonaws.com').Trim()
+$env:TF_VAR_master_authorized_cidrs='[{"cidr_block":"' + $operatorIp + '/32","display_name":"operator"}]'
+```
+
+GKE 생성 후 `secretsyncs.secret-sync.gke.io` CRD가 없다면 Infra 코드의
+`secret_sync_config`가 빠진 것이다. Root Application을 적용하지 말고 먼저 Terraform
+코드를 고친 뒤 `No changes`까지 확인한다. 리전 노드풀이 3대로 시작하면 autoscaling이
+`min_node_count`가 아니라 `total_min_node_count`를 사용하는지도 확인한다.
 
 ## 실패 시 중단 기준
 
