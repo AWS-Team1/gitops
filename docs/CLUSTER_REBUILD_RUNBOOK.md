@@ -1,5 +1,8 @@
 # EKS/GKE 클러스터 재생성 런북
 
+AWS/GCP dev 환경을 처음부터 만들고 Argo CD를 먼저 설치한 뒤 GitOps를 push하는 절차는
+[Dev EKS/GKE 최초 구축 런북](DEV_MULTI_CLOUD_BOOTSTRAP_RUNBOOK.md)을 따른다.
+
 ## 보장 범위
 
 이 런북은 **클러스터만** 지웠다가 다시 만드는 절차다. 다음 상태는 유지한다.
