@@ -44,10 +44,6 @@ test "$ACCOUNT" = "769413326616" || { echo "잘못된 AWS 계정: $ACCOUNT" >&2;
 ZONE_ID=$(aws route53 list-hosted-zones-by-vpc --vpc-id vpc-07194d5f908bac7cf --vpc-region ap-northeast-2 --query "HostedZoneSummaries[?Name=='boa.internal.'].HostedZoneId | [0]" --output text)
 test -n "$ZONE_ID" && test "$ZONE_ID" != "None" || { echo "boa.internal Private Hosted Zone이 기존 VPC에 연결되지 않았습니다." >&2; exit 1; }
 
-for name in app accounts ledger; do
-  SECRET_NAME="/boa/database/$name" bash gitops/02_scripts/prepare-database-secret.sh
-done
-
 terraform fmt -check -recursive Infra
 for root in aws-core aws-rds aws-cache aws-eks aws-ops aws-db-bootstrap; do
   terraform -chdir="Infra/$root" init
@@ -113,7 +109,6 @@ PAT는 파일이나 Git에 저장하지 않는다. 연결이 `Successful`이면 
 
 | 스크립트 | 하는 일 |
 |---|---|
-| `prepare-database-secret.sh` | 지정한 DB 비밀번호 파일 하나 생성/재사용 |
 | `prepare-jwt.sh` | JWT 키 생성 또는 기존 키 쌍 검증 |
 | `render-aws-runtime.sh` | Terraform output을 manual YAML에 렌더 |
 | `install-argocd.sh` | Argo CD Helm 설치/업그레이드 |

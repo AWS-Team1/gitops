@@ -21,7 +21,6 @@ AWS/GCP 클러스터 동시 재생성·배포는
 ├── bootstrap-all.sh
 ├── bootstrap.sh
 ├── install-argocd.sh
-├── prepare-database-secret.sh
 ├── prepare-jwt.sh
 ├── prepare-jwt-gcp.sh
 ├── render-aws-runtime.sh

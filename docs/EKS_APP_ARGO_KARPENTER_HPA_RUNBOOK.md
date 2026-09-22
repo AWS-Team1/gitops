@@ -145,7 +145,7 @@ kubectl kustomize 03_manifests/eks/applications >/dev/null
 수정해 **원격에 게시한 뒤** Root를 적용한다. Helm chart의
 `targetRevision: 1.14.1` 같은 값은 Git 브랜치로 바꾸지 않는다.
 
-## 3. AWS 런타임 값과 Secret 준비
+## 3. AWS 런타임 값과 JWT 준비
 
 Terraform을 적용하지는 않지만, 이미 만든 AWS 리소스의 ARN/ID가 Git 선언과
 일치해야 한다. ALB/SG/RDS를 재생성했다면 `docs/ARGOCD_EKS_RUNBOOK.md` 5장의
@@ -153,7 +153,6 @@ Terraform을 적용하지는 않지만, 이미 만든 AWS 리소스의 ARN/ID가
 
 ```bash
 git diff --check
-bash 02_scripts/prepare-database-secret.sh
 bash 02_scripts/prepare-jwt.sh
 ```
 
