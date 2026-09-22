@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: userservice
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-1343dad73d81dac8a5764f95a377086526efc043
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-59af9a84a4c6441ef7160c21c3527557859243b6
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -21,6 +21,22 @@ spec:
                   key: password
             - name: ACCOUNTS_DB_URI
               value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/accountsdb"
+            - name: VALKEY_HOST
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_HOST}}
+            - name: VALKEY_PORT
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_PORT}}
+            - name: VALKEY_USERNAME
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: username}}
+            - name: VALKEY_PASSWORD
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
+            - name: VALKEY_TLS
+              value: "true"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
+            - name: ACCESS_TOKEN_EXPIRY_SECONDS
+              value: "120"
+            - name: REFRESH_TOKEN_EXPIRY_SECONDS
+              value: "3600"
       volumes:
         - $patch: replace
         - name: secrets-store

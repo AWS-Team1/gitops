@@ -3,16 +3,43 @@ kind: Deployment
 metadata:
   name: frontend
 spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   template:
     spec:
       containers:
         - name: frontend
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-frontend:sha-b5bf59f052f5bc7c20d910992259957523999065
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-frontend:sha-b59835c502f7d84170976d5e1d07151331e4fc71
           env:
             - name: ENV_PLATFORM
               value: "aws"
             - name: CLUSTER_NAME
               value: "boa-eks"
+            - name: VALKEY_HOST
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_HOST}}
+            - name: VALKEY_PORT
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_PORT}}
+            - name: VALKEY_USERNAME
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: username}}
+            - name: VALKEY_PASSWORD
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
+            - name: VALKEY_TLS
+              value: "true"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
+            - name: SESSION_IDLE_TTL_SECONDS
+              value: "300"
+            - name: SESSION_ABSOLUTE_TTL_SECONDS
+              value: "3600"
+            - name: SESSION_MAX_PER_USER
+              value: "3"
+            - name: TOKEN_REFRESH_WINDOW_SECONDS
+              value: "30"
+            - name: COOKIE_SECURE
+              value: "true"
       volumes:
         - $patch: replace
         - name: secrets-store

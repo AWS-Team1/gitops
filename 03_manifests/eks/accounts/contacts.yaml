@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: contacts
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-contacts:sha-1343dad73d81dac8a5764f95a377086526efc043
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-contacts:sha-133dacdfb6e99446c7d3d116e431ed80913624dc
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -21,6 +21,20 @@ spec:
                   key: password
             - name: ACCOUNTS_DB_URI
               value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/accountsdb"
+            - name: VALKEY_HOST
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_HOST}}
+            - name: VALKEY_PORT
+              valueFrom: {configMapKeyRef: {name: bank-of-anthos-env, key: VALKEY_PORT}}
+            - name: VALKEY_USERNAME
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: username}}
+            - name: VALKEY_PASSWORD
+              valueFrom: {secretKeyRef: {name: valkey-secret, key: password}}
+            - name: VALKEY_TLS
+              value: "true"
+            - name: CONTACTS_CACHE_TTL_SECONDS
+              value: "600"
+            - name: CONTACTS_CACHE_JITTER_SECONDS
+              value: "60"
       volumes:
         - $patch: replace
         - name: secrets-store

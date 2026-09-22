@@ -8,11 +8,14 @@ metadata:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-northeast-2:769413326616:certificate/1c81ee2e-edbc-4a42-961d-816d571767ab
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
 spec:
   ingressClassName: alb
   rules:
-    - http:
+    - host: boa-app.bespinglobal.site
+      http:
         paths:
           - path: /                # frontend만 외부(ALB)에 노출
             pathType: Prefix        # 나머지 5개 서비스는 frontend를 통해서만 내부 통신
@@ -21,4 +24,3 @@ spec:
                 name: frontend
                 port:
                   number: 8080
-

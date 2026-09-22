@@ -4,6 +4,16 @@ namespace: bank-of-anthos
 resources:
   - ../../base/accounts
 patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
   - path: userservice.yaml
   - path: contacts.yaml
   - target:
@@ -25,3 +35,28 @@ patches:
       kind: NetworkPolicy
       name: contacts-networkpolicy
     patch: *rds-egress
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: userservice-networkpolicy
+    patch: &valkey-egress |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          to:
+            - ipBlock:
+                cidr: 192.168.24.0/24
+            - ipBlock:
+                cidr: 192.168.25.0/24
+          ports:
+            - port: 6379
+              protocol: TCP
+            - port: 6380
+              protocol: TCP
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: NetworkPolicy
+      name: contacts-networkpolicy
+    patch: *valkey-egress
