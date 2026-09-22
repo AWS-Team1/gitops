@@ -2,14 +2,11 @@
 
 EKS/GKE용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
 공통 애플리케이션 리소스는 Kustomize base에 두고 클라우드별 설정만 overlay에서 관리합니다.
-GKE overlay는 컷오버 전 standby 구성이며 6개 Deployment를 `replicas: 0`으로 유지합니다.
-
-현재 브랜치의 설치·검증 순서는
-[`docs/EKS_GITOPS_CICD_RUNBOOK.md`](docs/EKS_GITOPS_CICD_RUNBOOK.md)를 따릅니다.
-AWS/GCP 클러스터 동시 재생성·배포는
-[`docs/CLUSTER_REBUILD_RUNBOOK.md`](docs/CLUSTER_REBUILD_RUNBOOK.md)를 따릅니다.
-기존 `jiho-test-cd` 기준 AWS 값 교체·저장소 연결 상세는
-[`docs/ARGOCD_EKS_RUNBOOK.md`](docs/ARGOCD_EKS_RUNBOOK.md)를 참고합니다.
+EKS/GKE 개발 환경 최초 구축은
+[`docs/DEV_MULTI_CLOUD_BOOTSTRAP_RUNBOOK.md`](docs/DEV_MULTI_CLOUD_BOOTSTRAP_RUNBOOK.md)를 따릅니다.
+클러스터만 재생성할 때는
+[`docs/CLUSTER_REBUILD_RUNBOOK.md`](docs/CLUSTER_REBUILD_RUNBOOK.md), VPN/DMS까지 포함한
+전체 삭제·재구축은 [`docs/FULL_REBUILD_RUNBOOK.md`](docs/FULL_REBUILD_RUNBOOK.md)를 따릅니다.
 
 ## 구조
 
