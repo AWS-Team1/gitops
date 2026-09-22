@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: contacts
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-test-contacts:sha-5e22e05492e28d69848e68cd4f320a1fd6e057ec
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-test-contacts:sha-133dacdfb6e99446c7d3d116e431ed80913624dc
           env:
             - name: POSTGRES_USER
               valueFrom:

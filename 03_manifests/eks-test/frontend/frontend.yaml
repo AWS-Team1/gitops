@@ -3,6 +3,13 @@ kind: Deployment
 metadata:
   name: frontend
 spec:
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Two replicas are pinned to two nodes by required pod anti-affinity.
+      # Replace one at a time instead of trying to schedule a third pod.
+      maxSurge: 0
+      maxUnavailable: 1
   template:
     spec:
       containers:

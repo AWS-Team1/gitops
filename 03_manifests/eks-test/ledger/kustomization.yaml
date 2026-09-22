@@ -4,6 +4,16 @@ namespace: bank-of-anthos
 resources:
   - ../../base/ledger
 patches:
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: add
+        path: /spec/strategy
+        value:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
   - path: balancereader.yaml
   - path: ledgerwriter.yaml
   - path: transactionhistory.yaml
@@ -48,6 +58,8 @@ patches:
                 cidr: 10.0.25.0/24
           ports:
             - port: 6379
+              protocol: TCP
+            - port: 6380
               protocol: TCP
   - target:
       group: networking.k8s.io

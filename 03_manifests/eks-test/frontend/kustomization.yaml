@@ -36,3 +36,5 @@ patches:
           ports:
             - port: 6379
               protocol: TCP
+            - port: 6380
+              protocol: TCP
