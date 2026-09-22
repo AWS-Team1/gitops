@@ -461,6 +461,30 @@ GKE 생성 후 `secretsyncs.secret-sync.gke.io` CRD가 없다면 Infra 코드의
 코드를 고친 뒤 `No changes`까지 확인한다. 리전 노드풀이 3대로 시작하면 autoscaling이
 `min_node_count`가 아니라 `total_min_node_count`를 사용하는지도 확인한다.
 
+## 9. 2026-09-22 GCP 구축 장애 기록
+
+이번 구축에서 실제로 발생한 문제다. 같은 증상이면 새 해결책을 만들지 말고 아래 경로를
+먼저 확인한다.
+
+| 증상 | 원인 | 해결 및 재발 방지 |
+|---|---|---|
+| `apply_root: command not found` | 새 SSH 셸에서 함수 정의 없이 apply 명령만 실행 | 저장소 상위 디렉터리에서 3장의 `apply_root`를 먼저 정의한다. SSH 재접속 시 셸 함수와 환경 변수는 다시 설정한다. |
+| Google provider가 ADC를 찾지 못함 | `gcloud auth login`만 했거나 기존 토큰의 재인증이 만료됨 | `gcloud auth login --force --update-adc` 후 `gcloud auth application-default print-access-token`으로 확인한다. |
+| `gcp-cloudsql`이 `Unable to find remote state`로 실패 | 선행 `gcp-core`가 실패해 `gcp/core/terraform.tfstate`가 없음 | downstream root를 계속 실행하지 말고 `gcp-core`를 먼저 `No changes`까지 완료한다. |
+| PSA 연결이 예전 `boa-pca-range`를 참조 | Cloud SQL 삭제 뒤 Service Networking 연결만 남은 재구축 잔여물 | 3.3의 `vpc-peerings update`로 `boa-psa-range`를 연결하고 Terraform state에 import한다. |
+| Secret 생성이 HTTP 409로 실패 | 보존한 `boa-database-accounts`, `boa-database-ledger`가 GCP에는 있지만 새 state에는 없음 | Secret을 삭제하지 말고 `adopt_gcp_secret`으로 import한다. |
+| Cloud SQL이 `Invalid Tier (db-custom-1-3840) for ENTERPRISE_PLUS`로 실패 | PostgreSQL 16의 기본 edition은 Enterprise Plus지만 custom tier는 Enterprise 전용 | 모듈에 `edition = "ENTERPRISE"`를 명시한다. |
+| GKE apply 중 SSH 단절 후 state가 비고 lock만 남음 | 클러스터 API 작업 도중 코드 서버 연결과 Terraform 프로세스가 끊김 | 중복 apply하지 않는다. 프로세스 종료를 확인한 뒤 lock을 해제하고 이미 생긴 Service Account와 Cluster를 import한다. |
+| Windows에서 `export`, `\`, `/tmp` 명령이 연속 실패 | Bash 명령과 터미널 출력 전체를 PowerShell에 붙여 넣음 | 8장의 PowerShell 문법을 사용하고, 터미널 출력은 다시 실행하지 않는다. |
+| `SecretSync` CRD가 없음 | `secret_manager_config`는 CSI mount만 켜며 Kubernetes Secret 동기화 기능은 별도임 | Google provider 7.33 이상과 `secret_sync_config { enabled = true }`를 사용한다. |
+| 리전 노드풀이 최소 1대 설정인데 3대 생성 | `min_node_count`는 리전 전체가 아니라 존별 수량 | `total_min_node_count = 1`, `total_max_node_count = 4`를 사용한다. 실제 워크로드 요청량에 따라 1대보다 많이 유지될 수 있다. |
+| 앱 Ingress IP가 생겼지만 처음에는 404 | GCP URL map과 backend 전파가 아직 끝나지 않음 | backend가 `HEALTHY`인지 확인하고 잠시 후 `curl http://<INGRESS_IP>/`가 200인지 재검증한다. |
+| Argo CD HTTP는 열렸지만 HTTPS 실패 | Google Managed Certificate가 아직 `Provisioning` | DNS A 레코드와 고정 IP를 확인하고 인증서가 `Active`가 될 때까지 기다린다. |
+
+이번 장애에서 확정한 영구 수정은 Infra의 `fix/gcp-rebuild-runtime` 브랜치에 있다.
+Cloud SQL edition, GKE Secret Sync, 리전 노드 총합 autoscaling을 포함한다. 이 수정이
+`Infra/dev`에 병합되지 않았다면 반복 구축을 시작하지 않는다.
+
 ## 실패 시 중단 기준
 
 - AWS Account가 `769413326616`이 아님
