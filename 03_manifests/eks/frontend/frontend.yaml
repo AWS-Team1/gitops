@@ -13,6 +13,31 @@ spec:
               value: "aws"
             - name: CLUSTER_NAME
               value: "boa-eks"
+            - name: SCHEME
+              value: "https"
+            - name: COOKIE_SECURE
+              value: "true"
+            - name: VALKEY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: host
+            - name: VALKEY_PORT
+              value: "6379"
+            - name: VALKEY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: username
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: password
+            - name: VALKEY_TLS
+              value: "true"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
       volumes:
         - $patch: replace
         - name: secrets-store
