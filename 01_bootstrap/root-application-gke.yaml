@@ -18,7 +18,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
-    targetRevision: dev
+    targetRevision: dev-0922
     path: 03_manifests/gke/applications
   destination:
     server: https://kubernetes.default.svc
