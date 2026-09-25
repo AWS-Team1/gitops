@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# 목적: AWS Secrets Manager에 JWT 개인키와 공개키를 준비한다.
+# 입력: AWS 계정 자격 증명. 리전과 Secret 이름은 이 파일의 고정값을 사용한다.
+# 결과: /boa/jwt/private, /boa/jwt/public에 일치하는 키가 존재한다.
 # JWT 키를 Secrets Manager에 준비한다. 두 Secret에 현재 버전이 없을 때만 새로 생성하고,
 # 기존 키가 있으면 쌍이 맞는지 검증만 하고 그대로 재사용한다(기존 토큰 무효화 방지).
 set -euo pipefail

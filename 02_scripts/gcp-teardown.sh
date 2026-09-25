@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# 목적: GKE 삭제 전에 Kubernetes 컨트롤러가 만든 외부 LB 리소스만 정리한다.
+# 입력: --confirm, 현재 kubectl context가 boa-gke여야 한다.
+# 결과: 앱 Service와 Argo CD Ingress 관련 외부 LB 리소스가 제거된다.
 # GKE 삭제 전에 Kubernetes 컨트롤러가 만든 외부 LB만 정리한다.
 set -Eeuo pipefail
 

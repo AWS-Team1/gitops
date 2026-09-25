@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# 목적: GCP Secret Manager에 JWT 개인키와 공개키를 준비한다.
+# 입력: GCP_PROJECT_ID 환경변수(선택)와 gcloud 활성 계정.
+# 결과: boa-jwt-private, boa-jwt-public에 일치하는 키와 접근 권한이 존재한다.
 # GCP Secret Manager에 JWT 키를 준비한다. 기존 키는 재사용한다.
 set -Eeuo pipefail
 

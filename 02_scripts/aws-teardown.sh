@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# 목적: EKS 삭제 전에 앱 Ingress와 해당 ALB만 정리한다.
+# 입력: --confirm, 대상 계정/리전/클러스터 환경변수(선택).
+# 결과: Argo CD 재동기화가 멈추고 앱 Ingress와 해당 ALB가 제거된다.
 # Argo CD 재생성을 멈추고 앱 Ingress와 그 Ingress가 만든 ALB만 정리한다.
 # EKS와 Terraform 소유 인프라는 건드리지 않는다. --confirm이 있어야 실행된다.
 set -euo pipefail
@@ -21,7 +24,7 @@ info() { echo "INFO: $*"; }
 case "${1:-}" in
   --confirm) ;;
   -h|--help)
-    echo "Usage: teardown-cluster.sh --confirm"
+    echo "Usage: $0 --confirm"
     echo "Stops Argo CD reconciliation and waits for the app Ingress/ALB cleanup."
     exit 0
     ;;
