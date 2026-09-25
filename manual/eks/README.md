@@ -46,10 +46,13 @@ frontend는 별도 도메인 없이 `boa-ingress`가 만든 앱 ALB DNS를 사�
 | `ingress.yaml` | 앱 ALB Ingress |
 | `networkpolicy.yaml` | 서비스 간 통신 제한 |
 | `argocd-exposure/targetgroupbinding.yaml` | Argo CD UI용 Target Group 연결 |
+| `argo-workflow-trigger/*.yaml` | SQS EventSource, Sensor, WorkflowTemplate와 최소 RBAC |
 | `karpenter/*.yaml` | EC2NodeClass와 NodePool |
 
 `kustomization.yaml`은 앱 YAML과 SQL 파일을 하나의 배포 단위로 묶는다.
 `argocd-exposure/`와 `karpenter/`는 bootstrap이 별도 순서로 적용한다.
+`argo-workflow-trigger/`도 애플리케이션 kustomization과 분리된 전환용 bootstrap 단위이며,
+private image·Pod Identity·S3/SQS/VPC Endpoint 준비 전에는 적용하지 않는다.
 
 ## 장애 확인
 

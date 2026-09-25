@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: boa-deployment-queue
+  namespace: argo-events
+  labels:
+    app.kubernetes.io/part-of: boa-s3-deployment
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: boa-deploy-eventsource
+  sqs:
+    aws-dev:
+      # Infra must replace this interface value with the FIFO queue name.
+      queue: REPLACE_WITH_AWS_DEV_FIFO_QUEUE_NAME.fifo
+      region: ap-northeast-2
+      waitTimeSeconds: 20
+      jsonBody: true
+      dlq: true

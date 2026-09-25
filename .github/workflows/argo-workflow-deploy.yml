@@ -1,0 +1,132 @@
+name: Publish AWS deployment artifact
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - "03_manifests/base/**"
+      - "03_manifests/eks/**"
+      - "02_scripts/render-aws-deployment-artifact.sh"
+      - ".github/workflows/argo-workflow-deploy.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-aws-deployment-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  DEPLOY_ARTIFACT_BUCKET: ${{ vars.DEPLOY_ARTIFACT_BUCKET }}
+  DEPLOY_QUEUE_URL: ${{ vars.DEPLOY_QUEUE_URL }}
+  DEPLOY_ENV: ${{ vars.DEPLOY_ENV }}
+
+jobs:
+  publish:
+    name: Render, publish, and notify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout desired state
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${AWS_ROLE_ARN:?Repository or Environment variable AWS_ROLE_ARN is required}"
+          : "${AWS_REGION:?Repository or Environment variable AWS_REGION is required}"
+          : "${DEPLOY_ARTIFACT_BUCKET:?Repository or Environment variable DEPLOY_ARTIFACT_BUCKET is required}"
+          : "${DEPLOY_QUEUE_URL:?Repository or Environment variable DEPLOY_QUEUE_URL is required}"
+          : "${DEPLOY_ENV:?Repository or Environment variable DEPLOY_ENV is required}"
+          [[ "$DEPLOY_ENV" == "aws-dev" ]]
+          [[ "$DEPLOY_QUEUE_URL" == *.fifo ]]
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_RUN_NUMBER" =~ ^[0-9]+$ ]]
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Render canonical AWS desired state
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .deployment
+          bash 02_scripts/render-aws-deployment-artifact.sh \
+            .deployment/manifest.yaml
+
+          manifest_sha256=$(sha256sum .deployment/manifest.yaml | awk '{print $1}')
+          object_key="deployments/${DEPLOY_ENV}/${GITHUB_SHA}/manifest.yaml"
+          {
+            echo "MANIFEST_SHA256=$manifest_sha256"
+            echo "DEPLOY_OBJECT_KEY=$object_key"
+          } >> "$GITHUB_ENV"
+
+      - name: Validate rendered Kubernetes resources
+        uses: docker://ghcr.io/yannh/kubeconform:v0.7.0
+        with:
+          entrypoint: /kubeconform
+          args: >-
+            -strict
+            -summary
+            -ignore-missing-schemas
+            /github/workspace/.deployment/manifest.yaml
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Upload immutable manifest artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          checksum_base64=$(openssl dgst -sha256 -binary \
+            .deployment/manifest.yaml | base64 -w0)
+
+          aws s3api put-object \
+            --bucket "$DEPLOY_ARTIFACT_BUCKET" \
+            --key "$DEPLOY_OBJECT_KEY" \
+            --body .deployment/manifest.yaml \
+            --content-type application/yaml \
+            --checksum-algorithm SHA256 \
+            --checksum-sha256 "$checksum_base64" \
+            --metadata \
+              "environment=$DEPLOY_ENV,revision=$GITHUB_SHA,sha256=$MANIFEST_SHA256" \
+            --if-none-match '*'
+
+          aws s3api head-object \
+            --bucket "$DEPLOY_ARTIFACT_BUCKET" \
+            --key "$DEPLOY_OBJECT_KEY" >/dev/null
+
+      - name: Send FIFO deployment event
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload=$(jq -cn \
+            --arg environment "$DEPLOY_ENV" \
+            --arg revision "$GITHUB_SHA" \
+            --arg sequence "$GITHUB_RUN_NUMBER" \
+            --arg bucket "$DEPLOY_ARTIFACT_BUCKET" \
+            --arg key "$DEPLOY_OBJECT_KEY" \
+            --arg sha256 "$MANIFEST_SHA256" \
+            '{
+              environment: $environment,
+              revision: $revision,
+              sequence: $sequence,
+              bucket: $bucket,
+              key: $key,
+              sha256: $sha256
+            }')
+
+          aws sqs send-message \
+            --queue-url "$DEPLOY_QUEUE_URL" \
+            --message-body "$payload" \
+            --message-group-id "$DEPLOY_ENV" \
+            --message-deduplication-id "$GITHUB_SHA" >/dev/null

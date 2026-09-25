@@ -1,0 +1,210 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: boa-s3-manifest-deploy
+  namespace: argo-events
+  labels:
+    app.kubernetes.io/part-of: boa-s3-deployment
+spec:
+  serviceAccountName: boa-deploy-workflow
+  entrypoint: deploy
+  activeDeadlineSeconds: 1800
+  synchronization:
+    mutex:
+      name: boa-aws-dev-deployment
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  volumes:
+    - name: work
+      emptyDir: {}
+  arguments:
+    parameters:
+      - name: environment
+      - name: revision
+      - name: sequence
+      - name: bucket
+      - name: key
+      - name: sha256
+  templates:
+    - name: deploy
+      metadata:
+        labels:
+          app.kubernetes.io/part-of: boa-s3-deployment
+      container:
+        # Bootstrap blocker: build and mirror this aws-cli+kubectl+yq image to
+        # private ECR, then replace the bootstrap-required tag with a digest.
+        image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-gitops-deployer:bootstrap-required
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            set -Eeuo pipefail
+            mkdir -p "$HOME" "$TMPDIR"
+
+            environment=${ENVIRONMENT}
+            revision=${REVISION}
+            sequence=${SEQUENCE}
+            bucket=${BUCKET}
+            key=${OBJECT_KEY}
+            expected_sha256=${EXPECTED_SHA256}
+            manifest=/work/manifest.yaml
+            namespaced_manifest=/work/namespaced-manifest.yaml
+            preflight_manifest=/work/preflight-manifest.yaml
+            db_bootstrap_manifest=/work/db-bootstrap-job.yaml
+
+            [[ "$environment" == "aws-dev" ]]
+            [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$sequence" =~ ^[0-9]+$ ]]
+            [[ "$expected_sha256" =~ ^[0-9a-f]{64}$ ]]
+            [[ "$key" == "deployments/$environment/$revision/manifest.yaml" ]]
+
+            aws s3api get-object \
+              --bucket "$bucket" \
+              --key "$key" \
+              "$manifest" >/dev/null
+            actual_sha256=$(sha256sum "$manifest" | awk '{print $1}')
+            [[ "$actual_sha256" == "$expected_sha256" ]] || {
+              echo "Manifest checksum mismatch." >&2
+              exit 1
+            }
+
+            namespace_names=$(yq eval-all \
+              'select(.kind == "Namespace") | .metadata.name' "$manifest")
+            [[ "$namespace_names" == "bank-of-anthos" ]] || {
+              echo "Unexpected cluster-scoped resource in artifact: $namespace_names" >&2
+              exit 1
+            }
+            kubectl get namespace bank-of-anthos >/dev/null
+            yq eval-all 'select(.kind != "Namespace")' \
+              "$manifest" > "$namespaced_manifest"
+
+            invalid_documents=$(yq eval-all '
+              select(
+                .metadata.namespace != "bank-of-anthos" or
+                (
+                  .kind != "ConfigMap" and
+                  .kind != "Deployment" and
+                  .kind != "HorizontalPodAutoscaler" and
+                  .kind != "Ingress" and
+                  .kind != "Job" and
+                  .kind != "NetworkPolicy" and
+                  .kind != "SecretProviderClass" and
+                  .kind != "Service" and
+                  .kind != "ServiceAccount"
+                )
+              ) |
+              .kind + "/" + .metadata.name
+            ' "$namespaced_manifest")
+            [[ -z "$invalid_documents" ]] || {
+              echo "Unexpected kind or namespace in artifact: $invalid_documents" >&2
+              exit 1
+            }
+
+            # Jobs have immutable pod templates. Validate db-bootstrap separately
+            # because the deploy phase intentionally deletes and recreates it.
+            yq eval-all '
+              select(.kind != "Job" or .metadata.name != "db-bootstrap")
+            ' "$namespaced_manifest" > "$preflight_manifest"
+            yq eval-all '
+              select(.kind == "Job" and .metadata.name == "db-bootstrap")
+            ' "$namespaced_manifest" > "$db_bootstrap_manifest"
+            kubectl apply --dry-run=server -f "$preflight_manifest" >/dev/null
+            kubectl create --dry-run=client -f "$db_bootstrap_manifest" >/dev/null
+
+            last_sequence=$(kubectl -n bank-of-anthos get configmap \
+              boa-deployment-revision --ignore-not-found \
+              -o jsonpath='{.data.sequence}')
+            last_sequence=${last_sequence:-0}
+            [[ "$last_sequence" =~ ^[0-9]+$ ]]
+            if (( sequence <= last_sequence )); then
+              echo "Skipping stale or duplicate deployment sequence $sequence; current is $last_sequence."
+              exit 0
+            fi
+
+            unknown_waves=$(yq eval-all \
+              'select(.metadata.annotations."argocd.argoproj.io/sync-wave" != null) |
+               .metadata.annotations."argocd.argoproj.io/sync-wave" |
+               select(. != "-10" and . != "-5" and . != "-4" and . != "-3" and . != "-2")' \
+              "$namespaced_manifest")
+            [[ -z "$unknown_waves" ]] || {
+              echo "Unsupported deployment sync wave: $unknown_waves" >&2
+              exit 1
+            }
+
+            apply_wave() {
+              local wave=$1 file="/work/wave-${1#-}.yaml"
+              WAVE="$wave" yq eval-all \
+                'select(.metadata.annotations."argocd.argoproj.io/sync-wave" == strenv(WAVE))' \
+                "$namespaced_manifest" > "$file"
+              if grep -q '^apiVersion:' "$file"; then
+                kubectl apply -f "$file"
+              fi
+            }
+
+            apply_wave -5
+            apply_wave -4
+            kubectl -n bank-of-anthos rollout status \
+              deployment/bank-of-anthos-secret-sync --timeout=5m
+            apply_wave -3
+
+            kubectl -n bank-of-anthos delete job/db-bootstrap \
+              --ignore-not-found --wait=true
+            apply_wave -2
+            kubectl -n bank-of-anthos wait \
+              --for=condition=complete job/db-bootstrap --timeout=10m
+
+            yq eval-all \
+              'select(.metadata.annotations."argocd.argoproj.io/sync-wave" == null)' \
+              "$namespaced_manifest" > /work/wave-default.yaml
+            kubectl apply -f /work/wave-default.yaml
+
+            for deployment in \
+              userservice contacts balancereader ledgerwriter \
+              transactionhistory frontend; do
+              kubectl -n bank-of-anthos rollout status \
+                "deployment/$deployment" --timeout=10m
+            done
+            kubectl -n bank-of-anthos get ingress/boa-ingress >/dev/null
+
+            kubectl -n bank-of-anthos create configmap boa-deployment-revision \
+              --from-literal="environment=$environment" \
+              --from-literal="revision=$revision" \
+              --from-literal="sequence=$sequence" \
+              --from-literal="sha256=$actual_sha256" \
+              --dry-run=client -o yaml | kubectl apply -f -
+            echo "Deployment succeeded: $revision ($actual_sha256)"
+        env:
+          - name: ENVIRONMENT
+            value: "{{workflow.parameters.environment}}"
+          - name: REVISION
+            value: "{{workflow.parameters.revision}}"
+          - name: SEQUENCE
+            value: "{{workflow.parameters.sequence}}"
+          - name: BUCKET
+            value: "{{workflow.parameters.bucket}}"
+          - name: OBJECT_KEY
+            value: "{{workflow.parameters.key}}"
+          - name: EXPECTED_SHA256
+            value: "{{workflow.parameters.sha256}}"
+          - name: HOME
+            value: /work/home
+          - name: TMPDIR
+            value: /work/tmp
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          readOnlyRootFilesystem: true
+        volumeMounts:
+          - name: work
+            mountPath: /work

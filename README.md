@@ -1,12 +1,15 @@
 # Bank of Anthos GitOps
 
-EKS/GKE용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
+EKS/GKE용 Bank of Anthos 매니페스트와 배포 구성을 관리합니다.
 공통 애플리케이션 리소스는 Kustomize base에 두고 클라우드별 설정만 overlay에서 관리합니다.
 EKS/GKE 개발 환경 최초 구축은
 [`docs/DEV_MULTI_CLOUD_BOOTSTRAP_RUNBOOK.md`](docs/DEV_MULTI_CLOUD_BOOTSTRAP_RUNBOOK.md)를 따릅니다.
 클러스터만 재생성할 때는
 [`docs/CLUSTER_REBUILD_RUNBOOK.md`](docs/CLUSTER_REBUILD_RUNBOOK.md), VPN/DMS까지 포함한
 전체 삭제·재구축은 [`docs/FULL_REBUILD_RUNBOOK.md`](docs/FULL_REBUILD_RUNBOOK.md)를 따릅니다.
+AWS의 S3/SQS/Argo Events/Workflow 전환 설계와 bootstrap contract는
+[`docs/AWS_S3_SQS_ARGO_WORKFLOW_DEPLOYMENT.md`](docs/AWS_S3_SQS_ARGO_WORKFLOW_DEPLOYMENT.md)를
+따릅니다.
 
 ## 구조
 
@@ -44,6 +47,7 @@ EKS/GKE 개발 환경 최초 구축은
 manual/eks/
 ├── *.yaml                    # 최초 서비스/HPA 수동 배포용 전체 YAML
 ├── argocd-exposure/           # Argo CD UI ALB 연결 수동 YAML
+├── argo-workflow-trigger/     # SQS EventSource/Sensor/WorkflowTemplate/RBAC
 └── karpenter/                 # 수동 배포용 EC2NodeClass, NodePool
 ```
 
@@ -63,6 +67,10 @@ EKS 내부의 큰 단계만 다시 실행한다.
 Root Application은 `applications/`를 읽고, child Application이 `shared`,
 `accounts`, `ledger`, `frontend`를 배포합니다. 워크로드에 직접
 `kubectl apply`를 실행하지 마세요. Argo CD가 유일한 리소스 소유자입니다.
+
+신규 AWS 배포 경로는 `03_manifests/eks` 전체를 immutable S3 artifact로 만들고 FIFO SQS
+event로 Argo Workflow를 시작합니다. 전환이 완료되기 전까지 기존 Argo CD source와 runtime은
+삭제하지 않으며, 두 reconciler가 동시에 같은 workload를 관리하지 않게 전환 런북을 따릅니다.
 
 ## 검증
 

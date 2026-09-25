@@ -1,0 +1,89 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: boa-deployment
+  namespace: argo-events
+  labels:
+    app.kubernetes.io/part-of: boa-s3-deployment
+spec:
+  eventBusName: default
+  template:
+    serviceAccountName: boa-deploy-sensor
+  dependencies:
+    - name: deployment-event
+      eventSourceName: boa-deployment-queue
+      eventName: aws-dev
+      filters:
+        data:
+          - path: body.environment
+            type: string
+            value: ["aws-dev"]
+          - path: body.revision
+            type: string
+            value: ["^[0-9a-f]{40}$"]
+          - path: body.sequence
+            type: string
+            value: ["^[0-9]+$"]
+          - path: body.sha256
+            type: string
+            value: ["^[0-9a-f]{64}$"]
+  triggers:
+    - template:
+        name: deploy-aws-snapshot
+        argoWorkflow:
+          operation: submit
+          source:
+            resource:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Workflow
+              metadata:
+                generateName: boa-deploy-
+                namespace: argo-events
+                labels:
+                  app.kubernetes.io/part-of: boa-s3-deployment
+              spec:
+                workflowTemplateRef:
+                  name: boa-s3-manifest-deploy
+                arguments:
+                  parameters:
+                    - name: environment
+                      value: unset
+                    - name: revision
+                      value: unset
+                    - name: sequence
+                      value: "0"
+                    - name: bucket
+                      value: unset
+                    - name: key
+                      value: unset
+                    - name: sha256
+                      value: unset
+          parameters:
+            - src:
+                dependencyName: deployment-event
+                dataKey: body.environment
+              dest: spec.arguments.parameters.0.value
+            - src:
+                dependencyName: deployment-event
+                dataKey: body.revision
+              dest: spec.arguments.parameters.1.value
+            - src:
+                dependencyName: deployment-event
+                dataKey: body.sequence
+              dest: spec.arguments.parameters.2.value
+            - src:
+                dependencyName: deployment-event
+                dataKey: body.bucket
+              dest: spec.arguments.parameters.3.value
+            - src:
+                dependencyName: deployment-event
+                dataKey: body.key
+              dest: spec.arguments.parameters.4.value
+            - src:
+                dependencyName: deployment-event
+                dataKey: body.sha256
+              dest: spec.arguments.parameters.5.value
+      retryStrategy:
+        steps: 3
+        duration: 5s
+        factor: 2
