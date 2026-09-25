@@ -337,7 +337,7 @@ bank-app-jwt
 ### CLI 명령어
 
 ```powershell
-kubectl apply -k 03_manifests/gke/shared
+kubectl apply -k 03_manifests/overlays/gke/shared
 
 kubectl get secretsync,secretproviderclass `
   --namespace=$NAMESPACE
@@ -422,7 +422,7 @@ kubectl set env deployment/userservice `
 kubectl delete hpa --all `
   --namespace=bank-of-anthos
 
-kubectl apply --server-side --force-conflicts -k 03_manifests/gke
+kubectl apply --server-side --force-conflicts -k 03_manifests/overlays/gke
 ```
 
 ### 목적

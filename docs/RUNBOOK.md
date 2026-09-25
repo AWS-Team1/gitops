@@ -50,7 +50,7 @@
    읽으므로 이 단계가 필요합니다.
 
    ```bash
-   git diff -- manual/eks/argocd-exposure/targetgroupbinding.yaml manual/eks/secrets.yaml 03_manifests/eks/shared/secrets.yaml
+   git diff -- manual/eks/argocd-exposure/targetgroupbinding.yaml manual/eks/secrets.yaml 03_manifests/overlays/eks/shared/secrets.yaml
    ```
 
 4. AWS Secrets Manager의 JWT 키를 준비합니다.

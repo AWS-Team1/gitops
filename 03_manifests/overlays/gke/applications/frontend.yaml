@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
     targetRevision: dev-0922
-    path: 03_manifests/gke/frontend
+    path: 03_manifests/overlays/gke/frontend
   destination:
     server: https://kubernetes.default.svc
     namespace: bank-of-anthos

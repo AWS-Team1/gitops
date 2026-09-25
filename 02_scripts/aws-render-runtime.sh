@@ -26,7 +26,7 @@ DB_ROOT="$INFRA_ROOT/aws-db-bootstrap"
 EXPECTED_ACCOUNT=769413326616
 TGB_FILE="$REPO_ROOT/manual/eks/argocd-exposure/targetgroupbinding.yaml"
 MANUAL_SECRETS_FILE="$REPO_ROOT/manual/eks/secrets.yaml"
-GITOPS_SECRETS_FILE="$REPO_ROOT/03_manifests/eks/shared/secrets.yaml"
+GITOPS_SECRETS_FILE="$REPO_ROOT/03_manifests/overlays/eks/shared/secrets.yaml"
 
 [[ -d "$OPS_ROOT" && -d "$DB_ROOT" ]] || {
   echo "ERROR: Infra root 경로가 올바르지 않습니다: $INFRA_ROOT" >&2

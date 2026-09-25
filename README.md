@@ -23,6 +23,6 @@ Root Application은 `03_manifests/<platform>/applications`를 읽고 `shared`,
 
 ```bash
 for file in 02_scripts/*.sh; do bash -n "$file"; done
-kubectl kustomize 03_manifests/eks/applications
-kubectl kustomize 03_manifests/gke/applications
+kubectl kustomize 03_manifests/overlays/eks/applications
+kubectl kustomize 03_manifests/overlays/gke/applications
 ```

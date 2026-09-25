@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
     targetRevision: dev-0922
-    path: 03_manifests/eks/ledger
+    path: 03_manifests/overlays/eks/ledger
   destination:
     server: https://kubernetes.default.svc
     namespace: bank-of-anthos

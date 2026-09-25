@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: boa-ledger
+  name: boa-accounts
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-10"
@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
     targetRevision: dev-0922
-    path: 03_manifests/gke/ledger
+    path: 03_manifests/overlays/gke/accounts
   destination:
     server: https://kubernetes.default.svc
     namespace: bank-of-anthos
