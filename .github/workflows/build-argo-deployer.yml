@@ -1,0 +1,47 @@
+name: Build Argo deployer image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REGISTRY: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com
+  ECR_REPOSITORY: boa-argo-deployer
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build and push by digest
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tag="run-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+          docker build \
+            --tag "$ECR_REGISTRY/$ECR_REPOSITORY:$tag" \
+            tools/argo-deployer
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$tag"
+
+          digest="$(aws ecr describe-images \
+            --region "$AWS_REGION" \
+            --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=$tag" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text)"
+          test "${digest#sha256:}" != "$digest"
+          echo "Use: $ECR_REGISTRY/$ECR_REPOSITORY@$digest" >> "$GITHUB_STEP_SUMMARY"
