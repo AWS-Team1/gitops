@@ -43,7 +43,7 @@ jobs:
 
           rm -f "$chart/templates/smoke-configmap.yaml"
           mkdir -p "$chart/templates"
-          kubectl kustomize ./03_manifests/overlays/eks > "$rendered"
+          kubectl kustomize ./03_manifests/overlays/eks-natless > "$rendered"
 
           test -s "$rendered"
           grep -q '^kind: Deployment$' "$rendered"
