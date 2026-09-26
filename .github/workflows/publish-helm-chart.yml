@@ -1,0 +1,107 @@
+name: Publish Helm chart and deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [dev-0922]
+    paths:
+      - 03_manifests/**
+      - charts/boa-platform-chart/**
+      - .github/workflows/publish-helm-chart.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+  HELM_CHART_REPOSITORY: ${{ vars.HELM_CHART_REPOSITORY }}
+  AWS_DEPLOY_QUEUE_URL: ${{ vars.AWS_DEPLOY_QUEUE_URL }}
+
+concurrency:
+  group: aws-dev-chart-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Render application manifests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chart=./charts/boa-platform-chart
+          rendered="$chart/templates/bank-of-anthos.yaml"
+
+          rm -f "$chart/templates/smoke-configmap.yaml"
+          mkdir -p "$chart/templates"
+          kubectl kustomize ./03_manifests/overlays/eks > "$rendered"
+
+          test -s "$rendered"
+          grep -q '^kind: Deployment$' "$rendered"
+          grep -q '^kind: Service$' "$rendered"
+          ! grep -q 'argocd.argoproj.io/tracking-id' "$rendered"
+
+          images="$(awk '$1 == "image:" {print $2}' "$rendered")"
+          test -n "$images"
+          bad_images="$(printf '%s\n' "$images" | grep -v "^${ECR_REGISTRY}/" || true)"
+          if [ -n "$bad_images" ]; then
+            printf 'public or unexpected image:\n%s\n' "$bad_images" >&2
+            exit 1
+          fi
+
+      - name: Lint and package chart
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          version="0.1.0-dev.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          helm lint ./charts/boa-platform-chart
+          helm package ./charts/boa-platform-chart \
+            --version "$version" \
+            --app-version "$GITHUB_SHA" \
+            --destination "$RUNNER_TEMP"
+          echo "CHART_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Push chart and publish event
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          aws ecr get-login-password --region "$AWS_REGION" | \
+            helm registry login --username AWS \
+            --password-stdin "$ECR_REGISTRY"
+
+          helm push \
+            "$RUNNER_TEMP/boa-platform-chart-${CHART_VERSION}.tgz" \
+            "oci://${ECR_REGISTRY}"
+
+          chart_digest="$(aws ecr describe-images \
+            --region "$AWS_REGION" \
+            --repository-name "$HELM_CHART_REPOSITORY" \
+            --image-ids "imageTag=${CHART_VERSION}" \
+            --query 'imageDetails[0].imageDigest' \
+            --output text \
+            --no-cli-pager)"
+          test "${chart_digest#sha256:}" != "$chart_digest"
+
+          jq -n -c \
+            --arg gitopsSha "$GITHUB_SHA" \
+            --arg chartVersion "$CHART_VERSION" \
+            --arg chartDigest "$chart_digest" \
+            '{schemaVersion:1,environment:"aws-dev",gitopsSha:$gitopsSha,chartVersion:$chartVersion,chartDigest:$chartDigest}' \
+            > "$RUNNER_TEMP/deploy-event.json"
+
+          aws sqs send-message \
+            --region "$AWS_REGION" \
+            --queue-url "$AWS_DEPLOY_QUEUE_URL" \
+            --message-group-id aws-dev \
+            --message-deduplication-id "${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --message-body "file://${RUNNER_TEMP}/deploy-event.json" \
+            --no-cli-pager

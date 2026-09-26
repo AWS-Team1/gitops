@@ -42,6 +42,10 @@ spec:
     - server: https://kubernetes.default.svc
       namespace: cert-manager
 
+    # cert-manager controller and cainjector leader-election RBAC
+    - server: https://kubernetes.default.svc
+      namespace: kube-system
+
     # OpenTelemetry 오퍼레이터
     - server: https://kubernetes.default.svc
       namespace: opentelemetry-operator-system
