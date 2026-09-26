@@ -678,3 +678,19 @@ AppProject 에 `external-secrets` 네임스페이스와 `ClusterSecretStore`(클
 `kubectl kustomize` EKS·GKE 12개 오버레이 루트 + 신규 `bootstrap` 전부 렌더 성공. `SecretProviderClass` 와 pause 파드가 관측 오버레이에서 사라졌고, 계측 어노테이션은 `inject-java` 3 · `inject-python` 3 으로 회귀 없음.
 
 **실행으로만 확인되는 것** — ESO 2.11.0 이 EKS Pod Identity 를 실제로 집는지. 확인 방법 — 싱크 후 `kubectl -n external-secrets logs deploy/external-secrets` 에 자격증명 오류가 없는지, 그리고 `kubectl -n whatap-monitoring get externalsecret whatap-credentials` 가 `SecretSynced` 인지 본다. IRSA 만 지원하는 구성이면 SA 에 IRSA 어노테이션을 다는 경로로 바꿔야 한다.
+
+---
+
+## 12. EKS CloudWatch 전송 임시 비활성화 (2026-09-26)
+
+비용과 데이터 보호 정책 복잡도를 다시 검토할 때까지 OTel Gateway 의 CloudWatch
+전송을 중단했다. `awscloudwatchlogs`·`awsemf` exporter와 `logs/audit` 파이프라인을
+제거했고, metrics 파이프라인은 `otlp/whatap`만 사용한다.
+
+- trace: Whatap + S3
+- metric: Whatap
+- log: Whatap + S3
+
+기존 CloudWatch 로그 그룹과 과거 데이터는 삭제하지 않는다. 공통 `redaction`·
+`transform` processor도 유지하므로 Whatap과 S3로 나가는 데이터의 사전 마스킹은
+계속 적용된다.
