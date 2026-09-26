@@ -1,0 +1,178 @@
+# db-bootstrap Job.
+#
+# 이 Job 만 RDS master 자격 증명을 쓴다. 하는 일:
+#   1. accountsdb / ledgerdb 데이터베이스 생성 (없을 때만)
+#   2. 최소 권한 역할 2개(accounts_app, ledger_app) 생성 및 비밀번호를
+#      /boa/database/accounts, /boa/database/ledger 에 맞춤
+#   3. accounts 스키마는 accountsdb에, ledger 스키마는 ledgerdb에 적용
+#   4. accounts_app은 accountsdb에만, ledger_app은 ledgerdb에만 DML 권한 부여
+#
+# Helm post-install/post-upgrade hook 으로 돌린다. 애플리케이션 리소스와
+# NetworkPolicy가 반영된 뒤 실행되며, 내용은 멱등이라 반복 실행이 안전하다.
+#
+# 비밀값은 CSI 로 파일로만 마운트한다. Kubernetes Secret 으로 동기화하지 않고 로그에도 출력하지 않는다.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-bootstrap
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+  labels:
+    app: db-bootstrap
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app: db-bootstrap
+    spec:
+      restartPolicy: Never
+      serviceAccountName: bank-of-anthos-db-bootstrap
+      volumes:
+        - name: sql
+          configMap:
+            name: db-bootstrap-sql
+        - name: db-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-db-bootstrap-secrets
+      containers:
+        - name: bootstrap
+          image: postgres:16
+          env:
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: DB_HOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: bank-of-anthos-env
+                  key: DB_PORT
+            - name: PGSSLMODE
+              value: require
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+              readOnly: true
+            - name: db-secrets
+              mountPath: /mnt/db-secrets
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+
+              PGUSER=$(cat /mnt/db-secrets/master-username)
+              PGPASSWORD=$(cat /mnt/db-secrets/master-password)
+              ACCOUNTS_USER=$(cat /mnt/db-secrets/accounts-username)
+              ACCOUNTS_PASSWORD=$(cat /mnt/db-secrets/accounts-password)
+              LEDGER_USER=$(cat /mnt/db-secrets/ledger-username)
+              LEDGER_PASSWORD=$(cat /mnt/db-secrets/ledger-password)
+              export PGUSER PGPASSWORD
+
+              psql_admin() { psql -v ON_ERROR_STOP=1 --no-psqlrc -q "$@"; }
+
+              echo "== 1/4 accountsdb / ledgerdb 생성 (없을 때만) =="
+              psql_admin -d postgres <<'EOSQL'
+              SELECT 'CREATE DATABASE accountsdb'
+                WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'accountsdb')\gexec
+              SELECT 'CREATE DATABASE ledgerdb'
+                WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ledgerdb')\gexec
+              EOSQL
+
+              echo "== 2/4 애플리케이션 역할 생성 / 비밀번호 동기화 =="
+              psql_admin -d postgres -v u="$ACCOUNTS_USER" -v p="$ACCOUNTS_PASSWORD" <<'EOSQL'
+              DO $do$ BEGIN
+                BEGIN
+                  EXECUTE 'SET log_min_duration_statement = -1';
+                EXCEPTION WHEN OTHERS THEN NULL;
+                END;
+              END $do$;
+              SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'u', :'p')
+                WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'u')\gexec
+              SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'u', :'p')
+                WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = :'u')\gexec
+              EOSQL
+              psql_admin -d postgres -v u="$LEDGER_USER" -v p="$LEDGER_PASSWORD" <<'EOSQL'
+              SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'u', :'p')
+                WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'u')\gexec
+              SELECT format('ALTER ROLE %I LOGIN PASSWORD %L', :'u', :'p')
+                WHERE EXISTS (SELECT FROM pg_roles WHERE rolname = :'u')\gexec
+              EOSQL
+
+              echo "== 3/4 스키마 적용 (accounts -> accountsdb, ledger -> ledgerdb) =="
+              psql_admin -d accountsdb -f /sql/0-accounts-schema.sql
+
+              if [ "$(psql_admin -d ledgerdb -tAc \
+                        "SELECT to_regclass('public.transactions') IS NOT NULL")" != "t" ]; then
+                psql_admin -d ledgerdb -f /sql/0_init_tables.sql
+              else
+                echo "   ledger 스키마 이미 존재 - 건너뜀"
+              fi
+
+              echo "== 4/4 최소 권한 부여 (DML 만, DDL/소유권 없음) =="
+              psql_admin -d postgres -v u="$ACCOUNTS_USER" <<'EOSQL'
+              SELECT format('GRANT CONNECT ON DATABASE accountsdb TO %I', :'u')\gexec
+              EOSQL
+              psql_admin -d accountsdb -v u="$ACCOUNTS_USER" <<'EOSQL'
+              SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'u')\gexec
+              SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'u')\gexec
+              SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'u')\gexec
+              SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', :'u')\gexec
+              SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', :'u')\gexec
+              EOSQL
+
+              psql_admin -d postgres -v u="$LEDGER_USER" <<'EOSQL'
+              SELECT format('GRANT CONNECT ON DATABASE ledgerdb TO %I', :'u')\gexec
+              EOSQL
+              psql_admin -d ledgerdb -v u="$LEDGER_USER" <<'EOSQL'
+              SELECT format('GRANT USAGE ON SCHEMA public TO %I', :'u')\gexec
+              SELECT format('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO %I', :'u')\gexec
+              SELECT format('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I', :'u')\gexec
+              SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO %I', :'u')\gexec
+              SELECT format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO %I', :'u')\gexec
+              EOSQL
+
+              echo "== 검증 =="
+              psql_admin -d accountsdb -c '\dt'
+              psql_admin -d ledgerdb -c '\dt'
+              echo "== 완료 =="
+---
+# default-deny-all 아래에서도 db-bootstrap Pod 가 RDS 와 DNS 로 나갈 수 있게 한다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: db-bootstrap-networkpolicy
+spec:
+  podSelector:
+    matchLabels:
+      app: db-bootstrap
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.16.0/24
+        - ipBlock:
+            cidr: 10.0.17.0/24
+      ports:
+        - port: 5432
+          protocol: TCP
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP

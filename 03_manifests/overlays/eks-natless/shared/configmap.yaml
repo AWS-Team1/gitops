@@ -1,0 +1,12 @@
+# db-bootstrap Job 이 읽는 비밀 아닌 환경값.
+# 애플리케이션 Pod 는 db.boa.internal / boadb 를 Deployment 에 직접 두므로 이 ConfigMap 을 쓰지 않는다.
+# HARD-CODED: DB 이름/포트/내부 DNS는 재사용 환경에 맞게 변경한다.
+# DB endpoint 는 raw RDS 주소 대신 안정적인 내부 DNS(db.boa.internal)를 쓴다.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bank-of-anthos-env
+data:
+  DB_HOST: db.boa.internal
+  DB_PORT: "5432"
+  DB_NAME: boadb

@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  template:
+    spec:
+      containers:
+        - name: frontend
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-frontend:sha-b5bf59f052f5bc7c20d910992259957523999065
+          env:
+            - name: ENV_PLATFORM
+              value: "aws"
+            - name: CLUSTER_NAME
+              value: "boa-eks"
+      volumes:
+        - $patch: replace
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-secrets

@@ -1,0 +1,50 @@
+# =========================================================
+# 관측 트래픽용 NetworkPolicy
+#
+# 앱 네임스페이스는 default-deny-all(podSelector {} · Ingress+Egress)이고
+# 서비스별 정책이 이그레스를 5432·53 만 허용한다. 이 상태로는 계측 에이전트가
+# 수집기에 OTLP 를 한 건도 못 보낸다. VPC CNI 에서 정책 강제가 켜져 있다.
+#
+# 기존 정책을 고치지 않고 별도 객체로 더하는 이유 두 가지
+#   1. 같은 파드에 붙는 여러 NetworkPolicy 는 합집합이다
+#   2. 오버레이가 /spec/egress/0/to 와 /spec/ingress/0/from 을 배열 인덱스로
+#      치환한다. base 의 배열을 건드리면 클라우드별 DB 목적지 패치가 엉뚱한
+#      규칙에 적용된다 — 별도 객체는 인덱스와 무관하다
+#
+# GKE 쪽에도 같은 파일이 필요하다. shared/ 는 base 에 없고 오버레이에만 있어서
+# 파일이 두 곳에 중복된다 — base 에 shared/ 를 새로 만드는 것보다 기존 구조를
+# 건드리지 않는 쪽을 택했다.
+# =========================================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-to-otel-collector
+spec:
+  podSelector: {}                 # bank-of-anthos 의 모든 파드
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - { port: 4317, protocol: TCP }   # OTLP/gRPC
+        - { port: 4318, protocol: TCP }   # OTLP/HTTP
+---
+# 수집기가 앱 파드를 긁어야 할 때를 위한 인그레스.
+# 지금 구성은 앱이 밀어 보내는(push) 방식이라 필수는 아니지만, 나중에
+# prometheus 수신기로 액추에이터를 긁게 되면 이게 없으면 전부 막힌다.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-scrape-from-monitoring
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - { port: 8080, protocol: TCP }
