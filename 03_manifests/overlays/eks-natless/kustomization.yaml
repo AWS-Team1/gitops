@@ -19,3 +19,21 @@ patches:
       metadata:
         name: bank-of-anthos
       $patch: delete
+  - target:
+      kind: NetworkPolicy
+      name: frontend-networkpolicy
+    patch: |-
+      - op: replace
+        path: /spec/ingress/0/from/0/ipBlock/cidr
+        value: 10.0.0.0/24
+      - op: replace
+        path: /spec/ingress/0/from/1/ipBlock/cidr
+        value: 10.0.1.0/24
+  - target:
+      kind: Ingress
+      name: boa-ingress
+    patch: |-
+      - op: add
+        path: /metadata/annotations/
+        alb.ingress.kubernetes.io~1healthcheck-path
+        value: /ready
