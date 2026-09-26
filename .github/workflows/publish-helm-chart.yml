@@ -49,8 +49,8 @@ jobs:
           account_id="${ECR_REGISTRY%%.*}"
 
           test "$AWS_SECRET_PREFIX" = /infra-tf
-          [[ "$RDS_MASTER_SECRET_ARN" =~ ^arn:aws:secretsmanager:${AWS_REGION}:${account_id}:secret:rds\!
-          db- ]]
+          printf '%s' "$RDS_MASTER_SECRET_ARN" |
+              grep -Eq "^arn:aws:secretsmanager:${AWS_REGION}:${account_id}:secret:rds!db-"
 
           sed -i -E \
             -e "s#/boa/database/#${AWS_SECRET_PREFIX}/database/#g" \
