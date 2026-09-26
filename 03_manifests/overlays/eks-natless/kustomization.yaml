@@ -34,6 +34,5 @@ patches:
       name: boa-ingress
     patch: |-
       - op: add
-        path: /metadata/annotations/
-        alb.ingress.kubernetes.io~1healthcheck-path
+        path: /metadata/annotations/alb.ingress.kubernetes.io~1healthcheck-path
         value: /ready
