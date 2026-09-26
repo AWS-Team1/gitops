@@ -876,3 +876,57 @@ EKS 6개, GKE 4개가 옮겨 갔다(GKE 는 ESO 와 bootstrap 이 없다).
 - **관측 Application 이 렌더하는 리소스 전부** — EKS 15종 · GKE 9종의 네임스페이스와 클러스터 스코프 종류가 새 프로젝트 허용 목록 안에 있다.
 
 **실행으로만 확인되는 것** — Helm 차트 Application 4개(cert-manager · ESO · otel-operator · whatap-operator)는 `helm` 이 없어 로컬 렌더를 못 했다. 차트 원본의 템플릿을 읽어 네임스페이스 밖 리소스를 찾는 방식으로 대신했고, cert-manager 의 `kube-system` 건이 그렇게 나왔다. 실제 싱크에서 `is not permitted in project` 가 또 나오면 그 메시지의 리소스를 허용 목록에 추가하면 된다.
+
+---
+
+## 16. Instrumentation 이 스키마에 없는 필드를 쓰고 있었다 (2026-09-27)
+
+15항 푸시 뒤 `boa-monitoring` 이 프로젝트 이동에는 성공했으나 동기화가 실패했다.
+
+```
+failed to create typed patch object (bank-of-anthos/boa;
+opentelemetry.io/v1alpha1, Kind=Instrumentation):
+.spec.python.resources: field not declared in schema
+```
+
+실패한 리소스는 **`Instrumentation/boa` 하나뿐**이다(sync wave −1). 15항의 AppProject 분리 자체는 정상이었다 — `is not permitted in project` 가 아니다.
+
+### 16.1 원인 — 업스트림 CRD 가 언어별로 필드명을 다르게 지었다
+
+차트 0.99.0 의 `conf/crds/crd-opentelemetryinstrumentation.yaml` 을 읽어 확인했다.
+
+| 언어 | 리소스 요청·제한 필드 |
+|---|---|
+| `java` | `resources` |
+| **`python`** | **`resourceRequirements`** |
+
+우리는 `java` 쪽을 보고 `python` 에도 `resources` 를 적었다. Argo CD 가 서버사이드 적용을 쓰므로 스키마에 없는 필드는 그냥 무시되지 않고 **거부된다.**
+
+같은 파일을 EKS·GKE 가 공유하므로(`base/observability/`) 한 번 고치면 양쪽에 적용된다.
+
+### 16.2 나머지 필드는 전부 맞았다
+
+같은 사고를 또 겪지 않으려고 우리가 쓰는 필드를 CRD 스키마와 전부 대조했다.
+
+| 우리가 쓴 것 | 스키마 | 판정 |
+|---|---|---|
+| `spec.exporter.endpoint` | `endpoint`·`tls` | O |
+| `spec.sampler.type`·`argument` | 둘 다 있음 | O |
+| `spec.propagators`·`spec.env` | 있음 | O |
+| `spec.java.image`·`env`·`resources` | 있음 | O |
+| `spec.python.image`·`env` | 있음 | O |
+| `spec.python.resources` | **없음** | X → `resourceRequirements` |
+
+파일에 주석으로 남겼다 — **통일해 보이게 고치지 말 것.**
+
+### 16.3 검증의 빈틈이었다
+
+15항에서 "관측 Application 이 렌더하는 리소스 전부"를 검증했다고 적었는데, 그것은 **AppProject 허용 목록과의 대조**였다. 리소스 본문이 CRD 스키마에 맞는지는 보지 않았다.
+
+`kubectl kustomize` 는 CRD 를 모르므로 이 종류의 오류를 잡지 못한다. 클러스터에 적용해 봐야 나온다. 사용자 정의 리소스를 새로 쓰거나 필드를 추가할 때는 **차트의 CRD 원본에서 해당 필드가 선언돼 있는지 확인하는 절차**가 필요하다.
+
+### 검증
+
+`kubectl kustomize` EKS·GKE 관측·applications 오버레이 렌더 성공. 렌더 결과에서 `java` 는 `resources`, `python` 은 `resourceRequirements` 로 나온다.
+
+**실행으로만 확인되는 것** — 이 커밋 뒤 `Instrumentation/boa` 가 적용되고 wave −1 이 통과하는지. 통과하면 그다음 wave 의 수집기·Grafana 가 이어서 뜬다.

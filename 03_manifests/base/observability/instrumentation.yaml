@@ -94,7 +94,12 @@ spec:
       - name: OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED
         value: "true"
 
-    resources:
+    # java 는 resources, python 은 resourceRequirements 다. 업스트림 CRD 가
+    # 언어별로 이름을 다르게 지어 놨다(차트 0.99.0
+    # conf/crds/crd-opentelemetryinstrumentation.yaml). java 쪽을 보고 맞추면
+    # 서버사이드 적용이 ".spec.python.resources: field not declared in schema"
+    # 로 거부한다. 통일해 보이게 고치지 말 것.
+    resourceRequirements:
       limits:
         cpu: 500m
         memory: 128Mi
