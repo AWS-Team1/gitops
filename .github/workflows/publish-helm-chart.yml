@@ -41,7 +41,6 @@ jobs:
           chart=./charts/boa-platform-chart
           rendered="$chart/templates/bank-of-anthos.yaml"
 
-          rm -f "$chart/templates/smoke-configmap.yaml"
           mkdir -p "$chart/templates"
           kubectl kustomize ./03_manifests/overlays/eks-natless > "$rendered"
 
