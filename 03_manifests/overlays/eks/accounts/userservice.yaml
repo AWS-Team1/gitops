@@ -20,7 +20,7 @@ spec:
                   name: accounts-db-secret
                   key: password
             - name: ACCOUNTS_DB_URI
-              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/accountsdb"
+              value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/accountsdb?sslmode=require"
       volumes:
         - $patch: replace
         - name: secrets-store
