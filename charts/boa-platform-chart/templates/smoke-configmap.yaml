@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: boa-argo-workflows-smoke
-  namespace: {{ .Release.Namespace }}
-data:
-  status: "ok"
