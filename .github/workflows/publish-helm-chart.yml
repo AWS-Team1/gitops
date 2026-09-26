@@ -3,7 +3,7 @@ name: Publish Helm chart and deploy
 on:
   workflow_dispatch:
   push:
-    branches: [dev-0922, dev]
+    branches: [dev-0922]
     paths:
       - 03_manifests/**
       - charts/boa-platform-chart/**
