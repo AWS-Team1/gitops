@@ -16,7 +16,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-5"
 spec:
-  project: boa
+  project: boa-observability
 
   # HARD-CODED: 재사용할 GitHub 조직/저장소/브랜치에 맞게 변경한다.
   source:

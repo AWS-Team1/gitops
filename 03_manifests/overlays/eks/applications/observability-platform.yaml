@@ -29,7 +29,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-28"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     # 이 주소는 302 로 external-secrets.io 로 넘어간다. helm 이 따라가므로
@@ -108,7 +108,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-22"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
@@ -146,7 +146,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-25"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     repoURL: https://charts.jetstack.io
@@ -207,7 +207,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-20"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
@@ -302,7 +302,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-15"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     repoURL: https://whatap.github.io/helm

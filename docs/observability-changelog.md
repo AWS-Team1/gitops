@@ -814,5 +814,65 @@ Application 에 `resources-finalizer.argocd.argoproj.io` 가 걸려 있지 않�
 
 분리 시 주의할 것 두 가지를 미리 확인해 뒀다.
 
-- **`kube-system` destination 이 필요하다.** cert-manager 차트가 `global.leaderElection.namespace` 기본값 `kube-system` 으로 `Role`·`RoleBinding` 4개를 렌더한다(v1.19.1 `templates/rbac.yaml:3,27`·`cainjector-rbac.yaml:55,84`). **지금 `boa` 에도 이 destination 이 없다** — 잠재 결함이다.
+- **`kube-system` destination 이 필요하다.** cert-manager 차트가 `global.leaderElection.namespace` 기본값 `kube-system` 으로 `Role`·`RoleBinding` 4개를 렌더한다(v1.19.1 `templates/rbac.yaml:3,27`·`cainjector-rbac.yaml:55,84`). EKS 쪽은 팀에서 이미 `99ca529` 로 넣어 뒀다(영문 주석 "cert-manager controller and cainjector leader-election RBAC"). **GKE `boa` 에는 아직 없다** — 잠재 결함이다.
 - **`bank-of-anthos` destination 이 필요하다.** `Instrumentation/boa` 가 거기 있다. 이것 때문에 관측 프로젝트가 앱 네임스페이스를 허용해야 하는데, `namespaceResourceWhitelist` 는 destination 별로 나눌 수 없어 앱 네임스페이스에 아무 리소스나 만들 수 있게 된다. CR 을 `monitoring` 으로 옮기면 없앨 수 있다(앱 매니페스트 6개 수정 + 앱 파드 롤링 재시작 필요).
+
+---
+
+## 15. AppProject 분리 — 관측 권한을 앱에서 떼어냈다 (2026-09-27)
+
+`boa` 하나에 Application 10개가 전부 들어 있었다. `clusterResourceWhitelist` 는 **Application 별이 아니라 AppProject 전체의 허용 목록**이라, 관측 스택 때문에 열어 둔 클러스터 스코프 8종을 `boa-accounts`·`boa-ledger` 같은 앱 Application 도 그대로 쓸 수 있었다. Git 에 `ClusterRole` 을 넣기만 하면 Argo CD 가 적용해 준다.
+
+### 15.1 앱은 클러스터 스코프를 하나만 쓴다
+
+렌더로 세어 봤다. 앱 오버레이 4개(`accounts`·`frontend`·`ledger`·`shared`)가 만드는 클러스터 스코프 리소스는 **`shared` 의 `Namespace` 하나뿐**이다. 나머지는 전부 네임스페이스 리소스다.
+
+그래서 관측을 떼어내면 `boa` 를 **8종 → 1종**으로 되돌릴 수 있다.
+
+### 15.2 무엇을 옮겼나
+
+| AppProject | 소속 Application |
+|---|---|
+| `boa` | `boa-accounts` · `boa-frontend` · `boa-ledger` · `boa-shared` |
+| **`boa-observability`** (신규) | `boa-external-secrets` · `boa-whatap-bootstrap` · `boa-cert-manager` · `boa-otel-operator` · `boa-whatap-operator` · `boa-monitoring` |
+
+EKS 6개, GKE 4개가 옮겨 갔다(GKE 는 ESO 와 bootstrap 이 없다).
+
+**Application 이 프로젝트를 옮겨도 이미 배포된 리소스는 지워지지 않는다.** Argo CD 는 소유권을 프로젝트가 아니라 Application 이름으로 추적한다.
+
+### 15.3 놓치기 쉬운 destination 둘
+
+13항에서 `WhatapAgent` 하나가 빠져 Application 전체가 막혔다. 같은 사고를 막으려고 새 프로젝트의 허용 목록을 렌더와 대조해 검증했다.
+
+**`kube-system`** — cert-manager 차트가 `global.leaderElection.namespace` 기본값 `kube-system` 으로 `Role`·`RoleBinding` 4개를 렌더한다(v1.19.1 `templates/rbac.yaml:3,27` · `cainjector-rbac.yaml:55,84`). 우리가 의도한 게 아니라 차트가 그렇게 만든다.
+
+**`bank-of-anthos`** — `Instrumentation/boa` 가 앱 네임스페이스에 있다. 관측 프로젝트가 앱 네임스페이스를 허용해야 하는, 직관에 어긋나는 항목이다.
+
+### 15.4 정정 — `kube-system` 은 이미 팀이 넣어 뒀다
+
+14항에서 "지금 `boa` 에도 이 destination 이 없다"고 적었는데 **틀렸다.** 확인해 보니 EKS 는 `99ca529 fix: allow cert-manager leader election in kube-system` 으로 이미 들어가 있었다. 옛 파일 내용을 기준으로 판단한 오류다. 14항 본문도 고쳤다.
+
+**GKE `boa` 에는 아직 없다.** 이번 신규 `boa-observability` (GKE 판)에는 넣었으므로, 관측 Application 을 옮긴 뒤에는 해소된다. 다만 GKE `boa` 자체의 누락은 남아 있다 — 그쪽에 cert-manager 를 쓰는 Application 이 남지 않으므로 실해는 없다.
+
+### 15.5 분리의 이득이 새는 곳
+
+`namespaceResourceWhitelist` 는 **프로젝트 전체 단위**다. destination 별로 리소스 종류를 제한하는 기능이 없다. 그래서 `bank-of-anthos` 를 허용하는 순간, 관측 프로젝트가 앱 네임스페이스에 **아무 네임스페이스 리소스나** 만들 수 있게 된다.
+
+없애려면 `Instrumentation` 을 `monitoring` 으로 옮기고 앱 파드 6종의 어노테이션을 `"monitoring/boa"` 로 바꾸면 된다. 어노테이션 값은 **참조할 CR 의 주소**일 뿐 파드의 네임스페이스가 아니므로, 앱 파드는 `bank-of-anthos` 에 그대로 있다. 오퍼레이터가 `ClusterRole` 로 `instrumentations` 를 클러스터 전역 읽기 하므로(차트 0.99.0 `templates/clusterrole.yaml:247`) 교차 참조가 성립한다.
+
+접어 둔 이유 — 앱 매니페스트 6개를 건드려야 하고 앱 파드가 전부 롤링 재시작된다. 별도 건으로 남긴다(미결).
+
+### 15.6 `boa` 축소는 아직 안 했다
+
+**일부러 남겼다.** 관측 Application 이 새 프로젝트에서 Healthy 가 되는 것을 확인하기 전에 옛 권한을 지우면 되돌릴 자리가 없어진다. 초록을 확인한 뒤 `boa` 에서 뺄 것은 신규 `project-observability.yaml` 말미에 적어 뒀다.
+
+### 검증
+
+`kubectl kustomize` EKS 8개 · GKE 7개 · `eks-natless` 5개 오버레이 루트 전부 렌더 성공.
+
+기계적으로 대조했다.
+
+- **Application 18개(EKS 10 · GKE 8) 전부** — `repoURL` 이 소속 프로젝트의 `sourceRepos` 에 있고, `destination.namespace` 가 `destinations` 에 있다.
+- **관측 Application 이 렌더하는 리소스 전부** — EKS 15종 · GKE 9종의 네임스페이스와 클러스터 스코프 종류가 새 프로젝트 허용 목록 안에 있다.
+
+**실행으로만 확인되는 것** — Helm 차트 Application 4개(cert-manager · ESO · otel-operator · whatap-operator)는 `helm` 이 없어 로컬 렌더를 못 했다. 차트 원본의 템플릿을 읽어 네임스페이스 밖 리소스를 찾는 방식으로 대신했고, cert-manager 의 `kube-system` 건이 그렇게 나왔다. 실제 싱크에서 `is not permitted in project` 가 또 나오면 그 메시지의 리소스를 허용 목록에 추가하면 된다.

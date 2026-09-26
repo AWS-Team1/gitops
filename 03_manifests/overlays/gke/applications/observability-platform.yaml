@@ -22,7 +22,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-25"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     repoURL: https://charts.jetstack.io
@@ -83,7 +83,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-20"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
@@ -178,7 +178,7 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-15"
 spec:
-  project: boa
+  project: boa-observability
 
   source:
     repoURL: https://whatap.github.io/helm
