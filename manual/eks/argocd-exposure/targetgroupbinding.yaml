@@ -7,13 +7,13 @@ spec:
   serviceRef:
     name: argocd-server
     port: http
-  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-argocd-tg/3175b387efed36ae # 재생성 후 새 Target Group ARN으로 수동 갱신
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-argocd-tg/79478ca3068e7cbf # aws-render-runtime.sh로 갱신
   targetType: ip
   networking:
     ingress:
       - from:
           - securityGroup:
-              groupID: sg-0f259904b7c977264 # 재생성 후 새 ALB Security Group ID로 수동 갱신
+              groupID: sg-0e4b3718e6b209525 # aws-render-runtime.sh로 갱신
         ports:
           - protocol: TCP
             port: 8080
