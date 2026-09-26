@@ -13,10 +13,10 @@ permissions:
   id-token: write
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION }}
-  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
-  HELM_CHART_REPOSITORY: ${{ vars.HELM_CHART_REPOSITORY }}
-  AWS_DEPLOY_QUEUE_URL: ${{ vars.AWS_DEPLOY_QUEUE_URL }}
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  HELM_CHART_REPOSITORY: ${{ secrets.HELM_CHART_REPOSITORY }}
+  AWS_DEPLOY_QUEUE_URL: ${{ secrets.AWS_DEPLOY_QUEUE_URL }}
 
 concurrency:
   group: aws-dev-chart-publish
