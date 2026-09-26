@@ -1,8 +1,10 @@
 # =========================================================
-# 관측 플랫폼 — Helm 차트 3개
+# 관측 플랫폼 — Helm 차트 4개 + 시크릿 기반
 #
 # 순서가 강제된다. sync-wave 로 표현했다.
+#   -28  external-secrets    : 시크릿을 Secrets Manager 에서 끌어오는 컨트롤러
 #   -25  cert-manager        : 오퍼레이터의 변경 웹훅 인증서를 발급한다
+#   -22  obs-bootstrap       : 네임스페이스 · ClusterSecretStore · whatap-credentials
 #   -20  otel-operator       : OpenTelemetryCollector · Instrumentation CRD 를 만든다
 #   -15  whatap-operator     : 와탭 쿠버네티스 에이전트(클러스터 지표)
 #
@@ -13,7 +15,127 @@
 # cert-manager 를 빼면 오퍼레이터가 웹훅 인증서를 못 만들고, CR 을 적용할 때
 # "failed calling webhook" 으로 멈춘다. 오퍼레이터 차트에 자체 생성 옵션이
 # 있지만 업스트림이 cert-manager 를 전제로 하므로 그대로 따른다.
+#
+# external-secrets 가 맨 앞인 이유 — 와탭 오퍼레이터 Deployment 가
+# whatap-credentials 시크릿을 secretKeyRef 로 직접 읽고 optional 이 아니다.
+# 시크릿이 없으면 오퍼레이터 파드가 기동조차 못 한다. 그래서 그 시크릿을
+# 만드는 것이 오퍼레이터(-15)보다 확실히 앞서야 한다.
 # =========================================================
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: boa-external-secrets
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-28"
+spec:
+  project: boa
+
+  source:
+    # 이 주소는 302 로 external-secrets.io 로 넘어간다. helm 이 따라가므로
+    # 공식 문서에 적힌 주소를 그대로 쓴다. AppProject 의 sourceRepos 도
+    # 같은 문자열이어야 한다.
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    targetRevision: 2.11.0
+
+    helm:
+      releaseName: external-secrets
+
+      valuesObject:
+        # CRD 를 차트가 같이 설치한다. ExternalSecret · ClusterSecretStore 가
+        # 여기서 생긴다 — API 는 external-secrets.io/v1 이다(v1beta1 은 폐기).
+        installCRDs: true
+
+        # 실습 환경이라 1개씩.
+        replicaCount: 1
+
+        certController:
+          replicaCount: 1
+
+        serviceAccount:
+          create: true
+
+          # 이름을 고정한다. Pod Identity 연결이 (클러스터, 네임스페이스, SA)
+          # 문자열 일치로만 동작하므로, 차트 기본값에 맡기면 Terraform 쪽과
+          # 어긋났을 때 조용히 자격증명이 안 붙는다.
+          name: external-secrets
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+
+    syncOptions:
+      - CreateNamespace=true
+      # CRD 가 커서 kubectl apply 의 어노테이션 크기 한계를 넘는다.
+      - ServerSideApply=true
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+---
+# 관측 스택이 서기 전에 먼저 있어야 하는 것들 — 네임스페이스 하나,
+# ClusterSecretStore 하나, whatap-credentials 시크릿 하나.
+#
+# 관측 Application(wave -5)에 두지 않고 따로 뺀 이유는 순서 하나다.
+# whatap-credentials 는 와탭 오퍼레이터(-15)보다 먼저 있어야 하는데
+# -5 는 너무 늦다. 그리고 -25 ~ -15 의 나머지 Application 은 전부 외부 Helm
+# 차트를 가리켜서 우리 YAML 을 끼워 넣을 자리가 없다. 그래서 그릇을 새로 만들었다.
+#
+# 이름이 secret-stores 가 아닌 이유 — 시크릿만 담지 않는다. 네임스페이스를
+# 만들고(PSA 라벨을 붙이려면 우리가 선언해야 한다) 금고 설정도 여기 있다.
+#
+# 주의 — Argo CD 는 모르는 사용자 정의 리소스를 기본적으로 Healthy 로 친다.
+# ExternalSecret 을 적용하자마자 다음 wave 로 넘어가므로, 실제로 Secret 이
+# 만들어지기까지의 몇 초는 wave 가 보장해 주지 않는다. 그 사이 오퍼레이터
+# 파드는 CreateContainerConfigError 로 기다리다 스스로 회복한다.
+# 엄밀히 막으려면 argocd-cm 에 ExternalSecret 헬스 판정을 넣어야 한다(미결).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: boa-observability-bootstrap
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-22"
+spec:
+  project: boa
+
+  source:
+    repoURL: https://github.com/AWS-Team1/gitops.git
+    targetRevision: HEAD
+    path: 03_manifests/overlays/eks/bootstrap
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: whatap-monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+
+    syncOptions:
+      - ServerSideApply=true
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

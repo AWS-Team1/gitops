@@ -16,7 +16,15 @@ spec:
     - https://github.com/AWS-Team1/gitops.git
     - https://charts.jetstack.io
     - https://open-telemetry.github.io/opentelemetry-helm-charts
-    - https://whatap-cloud.github.io/whatap-operator
+
+    # 2026-09-26 교정 — whatap-cloud.github.io 는 존재하지 않는 주소였다.
+    # Application 쪽만 고치고 여기를 두면 "repo is not permitted in project"
+    # 로 막힌다. 두 곳이 문자열로 정확히 같아야 한다.
+    - https://whatap.github.io/helm
+
+    # External Secrets Operator. 이 주소는 302 로 external-secrets.io 로
+    # 넘어가는데 helm 이 따라가므로 문서에 적힌 주소를 그대로 쓴다.
+    - https://charts.external-secrets.io
 
   # ---------------------------------------------------------
   # 허용 대상 네임스페이스
@@ -41,6 +49,11 @@ spec:
     # 와탭 쿠버네티스 에이전트
     - server: https://kubernetes.default.svc
       namespace: whatap-monitoring
+
+    # External Secrets Operator 컨트롤러. 이 네임스페이스의 ServiceAccount
+    # 하나가 Pod Identity 로 Secrets Manager 를 읽는다.
+    - server: https://kubernetes.default.svc
+      namespace: external-secrets
 
   # ---------------------------------------------------------
   # 허용 클러스터 스코프 리소스
@@ -72,6 +85,11 @@ spec:
 
     - group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
+
+    # ClusterSecretStore 는 클러스터 스코프다. 여기 없으면
+    # bootstrap/clustersecretstore.yaml 이 적용되지 않는다.
+    - group: external-secrets.io
+      kind: ClusterSecretStore
 
   namespaceResourceWhitelist:
     - group: "*"
