@@ -20,7 +20,7 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::769413326616:role/boa-github-argo-workflows-deploy-dev
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Build and push by digest
