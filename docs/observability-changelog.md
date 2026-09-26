@@ -1107,3 +1107,60 @@ Terraform 이 `grafana_target_group_arn` 으로 output 을 내보내고 있으�
 저장소 전체에서 전방·후방 탐색 문법을 재검색해 남은 것이 없음을 확인했다.
 
 **실행으로만 확인되는 것** — 수집기가 실제로 기동하는지. `kubectl -n monitoring get pods` 에서 `otel-gateway-collector` 가 `2/2 Running` 이면 해소다.
+
+---
+
+## 20. Grafana TargetGroupBinding 을 렌더 스크립트에 연결했다 (2026-09-27)
+
+`TargetGroupBinding/grafana` 가 계속 `OutOfSync` 였다. 매니페스트에 값이 안 채워져 있었다.
+
+```
+targetGroupARN: arn:aws:...:targetgroup/boa-grafana-tg/REPLACE_ME
+groupID: sg-REPLACE_ME
+```
+
+### 20.1 저장소의 기존 방식을 몰랐던 것이 원인
+
+이 저장소는 AWS 런타임 값을 **매니페스트에 하드코딩**하되, 사람이 아니라 스크립트가 채운다. `02_scripts/aws-render-runtime.sh` 가 Terraform output 을 읽어 `sed` 로 써 넣고, 배포 런북 3단계에서 그 결과를 커밋·푸시한다. Argo CD 는 원격 Git 만 보므로 푸시가 필수다.
+
+이미 셋을 그렇게 다루고 있었다.
+
+| 파일 | 값 |
+|---|---|
+| `manual/eks/argocd-exposure/targetgroupbinding.yaml` | Argo CD 대상 그룹 ARN · ops ALB 보안 그룹 |
+| `manual/eks/secrets.yaml` · `overlays/eks/shared/secrets.yaml` | RDS 마스터 시크릿 ARN |
+
+**관측 스택을 만들면서 그 패턴에 Grafana 를 연결하지 않았다.** `REPLACE_ME` 를 적어 두고 스크립트에는 손대지 않은 것이 누락이다.
+
+### 20.2 배포 절차에서의 위치
+
+AWS 실행 순서 10단계 중 **2단계**다. Argo CD 설치(6단계)나 Root Application 적용(10단계)보다 훨씬 앞이다. 이유가 둘이다.
+
+1. 10단계에서 Argo CD 가 원격 Git 을 읽는다. 그때 값이 이미 채워져 있어야 한다.
+2. 7단계(`aws-install-argocd-exposure.sh`)가 2단계 결과물을 그대로 적용한다.
+
+**어떤 스크립트도 이것을 자동 호출하지 않는다.** 사람이 런북을 보고 순서대로 친다. `aws-install-argocd-exposure.sh` 머리말에 이름이 나오지만 "먼저 돌려 두고 오라"는 주석일 뿐이다.
+
+gitops 저장소의 GitHub Actions 는 이미지 빌드(`build-argo-deployer.yml`)와 차트 배포(`publish-helm-chart.yml`)뿐이고 배포 절차는 없다. Terraform 쪽(Infra 저장소)만 CI 로 돈다.
+
+### 20.3 무엇을 추가했나
+
+| 파일 | 변경 |
+|---|---|
+| `02_scripts/aws-render-runtime.sh` | `aws-observability` 루트와 `grafana.yaml` 추가. 값 검증·치환 대상 개수 확인·결과 출력까지 기존 패턴 그대로 |
+| `docs/RUNBOOK.md` | 스크립트 목록 설명과 3단계 `git diff` 예시에 파일 추가 |
+| `overlays/eks/observability/grafana.yaml` | `REPLACE_ME` 를 직접 고치지 말라는 주석 |
+
+보안 그룹은 **새로 조회하지 않는다.** Grafana 대상 그룹이 ops ALB 에 붙으므로(`aws-modules/observability/alb.tf:44` 의 `ops_alb_https_listener_arn`), 스크립트가 이미 읽고 있는 `ops_alb_security_group_id` 를 재사용한다.
+
+### 20.4 왜 손으로 한 번 넣지 않았나
+
+DR 프로젝트라 클러스터 재구축이 시나리오에 있다. 손으로 넣으면 **재구축 때마다 사람이 ARN 을 찾아 붙여넣어야 하고**, 런북에 수동 단계가 하나 더 생긴다. `whatap-credentials` 를 손으로 만들던 문제를 11항에서 없앴는데 같은 종류를 새로 만드는 셈이다.
+
+스크립트에 넣으면 런북을 바꾸지 않고 2단계에서 같이 채워진다.
+
+### 검증
+
+`bash -n` 문법 검사 통과. `kubectl kustomize` EKS·GKE 관측·applications 렌더 성공. 스크립트가 다룰 파일 4개가 모두 실재하고, 치환 대상이 `grafana.yaml` 에 각각 정확히 하나씩임을 확인했다. 참조하는 Terraform output 둘(`grafana_target_group_arn`·`ops_alb_security_group_id`)도 선언돼 있다.
+
+**실행으로만 확인되는 것** — 스크립트를 실제로 돌렸을 때 값이 제대로 채워지는지. `terraform` 이 있는 환경에서 `bash 02_scripts/aws-render-runtime.sh --infra-root <경로>` 를 돌린 뒤 `git diff` 로 네 파일을 검토하면 된다.

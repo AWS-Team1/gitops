@@ -201,6 +201,21 @@ spec:
   targetType: ip
 
   # PLACEHOLDER — terraform output -raw grafana_target_group_arn 값으로 교체
+# ---------------------------------------------------------
+# REPLACE_ME 는 그대로 두는 값이다
+# ---------------------------------------------------------
+# 아래 두 값은 사람이 손으로 채우지 않는다. 배포 런북 2단계의
+# 02_scripts/aws-render-runtime.sh 가 Terraform output 에서 읽어 sed 로
+# 써 넣고, 3단계에서 그 결과를 커밋·푸시한다. Argo CD 는 원격 Git 만 보므로
+# 푸시하지 않으면 렌더해도 효과가 없다.
+#
+#   targetGroupARN : Infra/aws-observability 의 grafana_target_group_arn
+#   groupID        : Infra/aws-ops 의 ops_alb_security_group_id
+#                    (Grafana 대상 그룹이 ops ALB 에 붙으므로 같은 SG 다)
+#
+# 클러스터를 다시 세우면 ARN 이 바뀐다. 그때도 스크립트가 채우므로
+# 여기를 직접 수정하지 말 것 — 다음 렌더에서 덮어써진다.
+# ---------------------------------------------------------
   targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-grafana-tg/REPLACE_ME
 
   networking:

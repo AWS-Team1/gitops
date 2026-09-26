@@ -18,7 +18,7 @@
 |---|---|---|---|
 | `aws-connect-cluster.sh` | kubectl을 EKS에 연결 | AWS 자격 증명 | `boa-eks` kubeconfig context |
 | `gcp-connect-cluster.sh` | kubectl을 GKE에 연결 | gcloud 활성 계정 | `boa-gke` kubeconfig context |
-| `aws-render-runtime.sh` | Terraform의 AWS 동적 값을 manifest에 렌더링 | `--infra-root` | Target Group/SG/RDS Secret ARN이 갱신된 YAML 3개 |
+| `aws-render-runtime.sh` | Terraform의 AWS 동적 값을 manifest에 렌더링 | `--infra-root` | Argo CD·Grafana Target Group/SG, RDS Secret ARN이 갱신된 YAML 4개 |
 | `aws-prepare-jwt.sh` | AWS JWT 키 준비 | AWS 자격 증명 | Secrets Manager JWT 키 2개 |
 | `gcp-prepare-jwt.sh` | GCP JWT 키 준비 | gcloud 활성 계정 | Secret Manager JWT 키 2개와 접근 권한 |
 | `aws-install-metrics-server.sh` | Metrics Server 설치 | EKS context | 사용 가능한 Metrics API |
@@ -50,7 +50,7 @@
    읽으므로 이 단계가 필요합니다.
 
    ```bash
-   git diff -- manual/eks/argocd-exposure/targetgroupbinding.yaml manual/eks/secrets.yaml 03_manifests/overlays/eks/shared/secrets.yaml
+   git diff -- manual/eks/argocd-exposure/targetgroupbinding.yaml manual/eks/secrets.yaml 03_manifests/overlays/eks/shared/secrets.yaml 03_manifests/overlays/eks/observability/grafana.yaml
    ```
 
 4. AWS Secrets Manager의 JWT 키를 준비합니다.
