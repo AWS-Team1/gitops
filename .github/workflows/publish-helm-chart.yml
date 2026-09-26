@@ -54,8 +54,8 @@ jobs:
 
           sed -i "s|/boa/database/|${AWS_SECRET_PREFIX}/database/|g" "$rendered"
           sed -i "s|/boa/jwt/|${AWS_SECRET_PREFIX}/jwt/|g" "$rendered"
-          sed -i -E "s|^([[:space:]]*- objectName:) \"arn:aws:secretsmanager:.*:secret:rds!db-[^\"]+\".*|\1
-          \"${RDS_MASTER_SECRET_ARN}\" # GitHub Actions runtime render|" "$rendered"
+          test "$(grep -c 'secret:rds!db-' "$rendered")" -eq 1
+          sed -i "/secret:rds!db-/c\        - objectName: \"${RDS_MASTER_SECRET_ARN}\" # GitHub Actions runtime render" "$rendered"
 
           grep -Fq "$RDS_MASTER_SECRET_ARN" "$rendered"
           ! grep -q 'objectName: "/boa/' "$rendered"          
