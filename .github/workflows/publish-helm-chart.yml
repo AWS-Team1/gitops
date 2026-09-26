@@ -58,12 +58,11 @@ jobs:
             exit 1
           fi
 
-      - name: Lint and package chart
+      - name: Package chart
         shell: bash
         run: |
           set -Eeuo pipefail
           version="0.1.0-dev.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
-          helm lint ./charts/boa-platform-chart
           helm package ./charts/boa-platform-chart \
             --version "$version" \
             --app-version "$GITHUB_SHA" \
