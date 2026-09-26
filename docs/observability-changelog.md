@@ -930,3 +930,48 @@ opentelemetry.io/v1alpha1, Kind=Instrumentation):
 `kubectl kustomize` EKS·GKE 관측·applications 오버레이 렌더 성공. 렌더 결과에서 `java` 는 `resources`, `python` 은 `resourceRequirements` 로 나온다.
 
 **실행으로만 확인되는 것** — 이 커밋 뒤 `Instrumentation/boa` 가 적용되고 wave −1 이 통과하는지. 통과하면 그다음 wave 의 수집기·Grafana 가 이어서 뜬다.
+
+---
+
+## 17. 우리가 쓰는 사용자 정의 리소스와 그 의존성 (2026-09-27)
+
+16항의 사고가 "CRD 스키마를 안 보고 CR 을 썼다"에서 나왔으므로, 우리가 무엇을 쓰고 그 CRD 를 누가 설치하는지 한 번 정리해 둔다.
+
+**우리는 CRD 를 만들지 않는다.** CRD 는 차트가 설치하고, 우리는 그것을 쓰는 CR 을 작성한다. `python.resources` 가 거부된 이유가 이것이다 — 등록증(CRD)에 없는 필드를 문서(CR)에 적었다.
+
+### 17.1 EKS 에서 우리가 작성하는 CR
+
+| 그룹 | CR | 개수 | CRD 설치 주체 |
+|---|---|---|---|
+| `opentelemetry.io` | `OpenTelemetryCollector` | 3 | `boa-otel-operator` |
+| | `Instrumentation` | 1 | 〃 |
+| `monitoring.whatap.com` | `WhatapAgent` | 1 | `boa-whatap-operator` |
+| `external-secrets.io` | `ClusterSecretStore` | 1 | `boa-external-secrets` |
+| | `ExternalSecret` | 3 | 〃 |
+| `secrets-store.csi.x-k8s.io` | `SecretProviderClass` | 4 | **EKS 애드온** |
+| `elbv2.k8s.aws` | `TargetGroupBinding` | 1 | **Terraform** |
+| `argoproj.io` | `Application`·`AppProject` | 10 + 2 | **Argo CD 자체** |
+
+GKE 는 `SecretSync`(`secret-sync.gke.io`)가 ESO 자리를 대신하고 `TargetGroupBinding` 이 없다.
+
+### 17.2 우리 Application 이 설치하지 않는 CRD 셋
+
+굵게 표시한 셋은 **관측 Application 밖에서 와야 한다.** 없으면 해당 리소스만 적용에 실패한다.
+
+| CRD | 출처 | 확인 결과 |
+|---|---|---|
+| `SecretProviderClass` | EKS 애드온 `secrets-store-csi-driver` | 앱 시크릿 경로가 이걸로 돌고 있다 |
+| `TargetGroupBinding` | Terraform `aws-eks/main.tf:65` 의 `helm_release` | **코드상 설치된다.** 차트 `aws-load-balancer-controller` 3.5.0 고정 |
+| `Application`·`AppProject` | Argo CD 설치분 | 이미 동작 중 |
+
+`TargetGroupBinding` 은 16항 진단 때 실패 후보 1순위로 의심했으나 **틀렸다.** 실제 원인은 `Instrumentation` 스키마였고, 이쪽 의존성은 갖춰져 있다.
+
+**확인 못 한 것** — 위는 "Terraform 이 설치하도록 작성돼 있다"이지 "지금 클러스터에 있다"가 아니다. 이 작업 환경의 kubeconfig 에 `boa-eks` 컨텍스트가 없어 직접 조회할 수 없었다. 확인 방법 — `kubectl get crd targetgroupbindings.elbv2.k8s.aws` 와 `kubectl -n kube-system get deploy aws-load-balancer-controller`.
+
+### 17.3 CR 에 필드를 추가할 때의 절차
+
+`kubectl kustomize` 는 CRD 를 모른다. 렌더가 통과해도 스키마에 없는 필드를 걸러내지 못하고, 클러스터에 적용해야 나온다. 16항이 그 사례다.
+
+그래서 CR 의 필드를 새로 쓰거나 바꿀 때는 **차트 원본의 CRD 에서 해당 필드가 선언돼 있는지** 확인한다. 차트를 받아 `conf/crds/` 또는 `crds/` 아래 YAML 의 `properties:` 를 보는 것이 유일하게 확실한 방법이다.
+
+같은 리소스 안에서도 필드명이 일관되지 않을 수 있다 — `Instrumentation` 은 `java.resources` 인데 `python.resourceRequirements` 다.
