@@ -3,8 +3,9 @@ name: Publish Helm chart and deploy
 on:
   workflow_dispatch:
   push:
-    branches: [dev-0922]
+    branches: [dev-0922, dev]
     paths:
+      - 03_manifests/**
       - charts/boa-platform-chart/**
       - .github/workflows/publish-helm-chart.yml
 
@@ -13,10 +14,10 @@ permissions:
   id-token: write
 
 env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-  HELM_CHART_REPOSITORY: ${{ secrets.HELM_CHART_REPOSITORY }}
-  AWS_DEPLOY_QUEUE_URL: ${{ secrets.AWS_DEPLOY_QUEUE_URL }}
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+  HELM_CHART_REPOSITORY: ${{ vars.HELM_CHART_REPOSITORY }}
+  AWS_DEPLOY_QUEUE_URL: ${{ vars.AWS_DEPLOY_QUEUE_URL }}
 
 concurrency:
   group: aws-dev-chart-publish
@@ -30,8 +31,32 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          role-to-assume: arn:aws:iam::769413326616:role/boa-github-argo-workflows-deploy-dev
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
+      - name: Render application manifests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chart=./charts/boa-platform-chart
+          rendered="$chart/templates/bank-of-anthos.yaml"
+
+          rm -f "$chart/templates/smoke-configmap.yaml"
+          mkdir -p "$chart/templates"
+          kubectl kustomize ./03_manifests/overlays/eks > "$rendered"
+
+          test -s "$rendered"
+          grep -q '^kind: Deployment$' "$rendered"
+          grep -q '^kind: Service$' "$rendered"
+          ! grep -q 'argocd.argoproj.io/tracking-id' "$rendered"
+
+          images="$(awk '$1 == "image:" {print $2}' "$rendered")"
+          test -n "$images"
+          bad_images="$(printf '%s\n' "$images" | grep -v "^${ECR_REGISTRY}/" || true)"
+          if [ -n "$bad_images" ]; then
+            printf 'public or unexpected image:\n%s\n' "$bad_images" >&2
+            exit 1
+          fi
 
       - name: Lint and package chart
         shell: bash
