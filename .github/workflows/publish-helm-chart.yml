@@ -47,6 +47,7 @@ jobs:
           test -s "$rendered"
           grep -q '^kind: Deployment$' "$rendered"
           grep -q '^kind: Service$' "$rendered"
+          ! grep -q '^kind: Namespace$' "$rendered"
           ! grep -q 'argocd.argoproj.io/tracking-id' "$rendered"
 
           images="$(awk '$1 == "image:" {print $2}' "$rendered")"
