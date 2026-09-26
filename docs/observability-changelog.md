@@ -975,3 +975,56 @@ GKE 는 `SecretSync`(`secret-sync.gke.io`)가 ESO 자리를 대신하고 `Target
 그래서 CR 의 필드를 새로 쓰거나 바꿀 때는 **차트 원본의 CRD 에서 해당 필드가 선언돼 있는지** 확인한다. 차트를 받아 `conf/crds/` 또는 `crds/` 아래 YAML 의 `properties:` 를 보는 것이 유일하게 확실한 방법이다.
 
 같은 리소스 안에서도 필드명이 일관되지 않을 수 있다 — `Instrumentation` 은 `java.resources` 인데 `python.resourceRequirements` 다.
+
+---
+
+## 18. boa 프로젝트 축소 — 관측 권한을 되돌렸다 (2026-09-27)
+
+15항에서 관측 Application 을 `boa-observability` 로 옮기면서 `boa` 에는 옛 권한을 일부러 남겨 뒀다. 되돌릴 자리를 확보하기 위해서였다. 이번에 그것을 정리했다.
+
+### 18.1 무엇을 뺐나
+
+| 항목 | 이전 | 이후 |
+|---|---|---|
+| `sourceRepos` | 5개 | **1개** — gitops 저장소만 |
+| `destinations` | 7개 | **1개** — `bank-of-anthos` |
+| `clusterResourceWhitelist` | 8종 | **1종** — `Namespace` |
+
+뺀 것은 차트 저장소 4개(jetstack · opentelemetry · whatap · external-secrets), 관측 네임스페이스 6개(`monitoring` · `whatap-monitoring` · `cert-manager` · `kube-system` · `opentelemetry-operator-system` · `external-secrets`), 클러스터 스코프 7종이다.
+
+`boa` 에 남는 Application 은 넷이다 — `boa-shared` · `boa-accounts` · `boa-ledger` · `boa-frontend`.
+
+### 18.2 왜 `Namespace` 는 남기나
+
+`shared` 오버레이가 `bank-of-anthos` 네임스페이스를 만든다. 이걸 빼면 앱 배포가 통째로 막힌다. 파일에 주석으로 남겼다.
+
+### 18.3 정정 — `argocd` destination 은 원래 없었다
+
+앞서 "`boa` 에 `argocd` destination 이 있으니 축소할 때 지우지 말라"고 말했는데 **틀렸다.** `grep` 결과에 잡힌 `namespace: argocd` 는 AppProject 자신의 `metadata.namespace` 였다. destination 이 아니다.
+
+Application 오브젝트는 루트 app-of-apps 가 만들고 그것은 이 프로젝트 밖이다. 축소 대상이 아니었다.
+
+### 18.4 이제 무엇이 막히나
+
+축소 전에는 누가 앱 오버레이에 `ClusterRole` 을 하나 넣으면 Argo CD 가 그대로 적용했다. 이제는 거부된다.
+
+```
+resource rbac.authorization.k8s.io:ClusterRole is not permitted in project boa
+```
+
+**이것이 분리의 실제 목적이다.** 프로젝트만 나누고 권한을 남겨 두면 나눈 의미가 없다.
+
+다만 이것은 **실수 방지 장치이지 침해 방어선이 아니다.** Argo CD 컨트롤러 자신의 쿠버네티스 RBAC 은 그대로이고, 컨트롤러가 탈취되면 AppProject 는 아무것도 막지 못한다.
+
+### 검증
+
+`kubectl kustomize` EKS 7개 · GKE 6개 오버레이 루트 전부 렌더 성공.
+
+기계적으로 재대조했다.
+
+- **Application 18개 전부** — `repoURL` 과 `destination.namespace` 가 소속 프로젝트에 허용돼 있다.
+- **앱 오버레이가 만드는 리소스 전부** — EKS 10종 · GKE 7종이 축소된 `boa` 안에서 허용된다. 클러스터 스코프는 `Namespace` 하나뿐이고 그것은 남겼다.
+
+**실행으로만 확인되는 것** — 앱 Application 4개가 축소 뒤에도 Synced 를 유지하는지. 렌더 대조로는 통과했지만, `kubectl kustomize` 가 못 잡는 종류(16항의 CRD 스키마 같은 것)가 또 있을 수 있다. 싱크 뒤 `boa-accounts` · `boa-ledger` · `boa-frontend` · `boa-shared` 상태를 확인한다.
+
+되돌리려면 이 커밋을 revert 하면 된다. 관측 Application 은 이미 `boa-observability` 에 있으므로 영향받지 않는다.
