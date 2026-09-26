@@ -1028,3 +1028,82 @@ resource rbac.authorization.k8s.io:ClusterRole is not permitted in project boa
 **실행으로만 확인되는 것** — 앱 Application 4개가 축소 뒤에도 Synced 를 유지하는지. 렌더 대조로는 통과했지만, `kubectl kustomize` 가 못 잡는 종류(16항의 CRD 스키마 같은 것)가 또 있을 수 있다. 싱크 뒤 `boa-accounts` · `boa-ledger` · `boa-frontend` · `boa-shared` 상태를 확인한다.
 
 되돌리려면 이 커밋을 revert 하면 된다. 관측 Application 은 이미 `boa-observability` 에 있으므로 영향받지 않는다.
+
+---
+
+## 19. 수집기가 정규식 때문에 기동조차 못 하고 있었다 (2026-09-27)
+
+`boa-monitoring` 이 `Degraded` 로 남아 있었다. 게이트웨이 파드가 `1/2 CrashLoopBackOff` 였고, **죽는 쪽은 와탭 사이드카가 아니라 수집기 본체(`otc-container`)** 였다.
+
+```
+failed to build pipelines: failed to create "redaction" processor,
+in pipeline "traces": error creating a redaction processor:
+failed to process block list: error compiling regex in list:
+error parsing regexp: invalid named capture: `(?<![0-9])[0-9]{10}(?![0-9])`
+```
+
+### 19.1 원인 — RE2 에는 전방·후방 탐색이 없다
+
+`redaction` 프로세서의 `blocked_values` 에 이렇게 적어 뒀었다.
+
+```
+(?<![0-9])[0-9]{10}(?![0-9])
+```
+
+의도는 "앞뒤가 숫자가 아닌 10자리 숫자"였다. 13자리 epoch 밀리초를 계좌번호로 오인하지 않게 하려는 것이다.
+
+그런데 **Go 표준 정규식(RE2)은 전방 탐색 `(?!)` 도 후방 탐색 `(?<!)` 도 지원하지 않는다.** 선형 시간 보장을 위해 의도적으로 뺀 기능이다. 그래서 컴파일 자체가 실패하고, 파이프라인 구성이 실패하고, **수집기 프로세스가 기동하지 못한다.**
+
+파이프라인 하나가 죽는 게 아니라 프로세스 전체가 죽는다. 게이트웨이가 못 뜨면 와탭·S3 양쪽 경로가 다 멈춘다.
+
+### 19.2 고친 방법
+
+```
+\b[0-9]{10}\b
+```
+
+`\b`(단어 경계)는 RE2 가 지원한다. 숫자는 단어 문자이므로 **더 긴 숫자열 안쪽에는 걸리지 않는다** — 13자리 epoch 밀리초를 오인하지 않는다는 원래 의도가 그대로 유지된다.
+
+원본과 다른 점이 하나 있다. 문자·밑줄에 바로 붙은 경우(`acct1234567890`)는 여기서 안 걸린다. 다만 그 경우는 바로 뒤 `transform` 프로세서의 `replace_pattern` 이 경계 없이 `[0-9]{10}` 으로 잡으므로 **두 겹으로 덮인다.** 마스킹 범위는 실질적으로 줄지 않는다.
+
+EKS·GKE 양쪽 같은 값이었고 둘 다 고쳤다.
+
+### 19.3 YAML 이중따옴표 함정
+
+이중따옴표 스칼라에서 `\b` 는 **백스페이스 문자(0x08)** 로 해석된다. 정규식 `\b` 를 넘기려면 `"\b"` 로 적어야 한다. 렌더 결과로 확인했다.
+
+```
+kubectl kustomize ... | grep blocked_values -A2
+  → \b[0-9]{10}\b
+```
+
+같은 파일의 `"url\.full"` 이 이미 그 규칙을 따르고 있었는데 새 줄에서 놓쳤다.
+
+### 19.4 곁다리로 해소된 미확인 항목
+
+사이드카 로그에서 이 줄이 나왔다.
+
+```
+[INFO] WAOTLP0103Open grpc server :6601
+```
+
+`WHATAP_OTEL_GRPC_SERVER_PORT=6601` 이 **실제로 적용된다.** 8항에서 "기본값이 아니므로 이미지가 이 값을 따르는지 확인이 필요하다"고 남겨 뒀던 항목이 해소됐다. 사이드카 자체는 처음부터 정상이었다.
+
+### 19.5 남은 것 — TargetGroupBinding 의 플레이스홀더
+
+`TargetGroupBinding/grafana` 가 `OutOfSync` 다. 매니페스트에 값이 안 채워져 있다.
+
+```
+targetGroupARN: arn:aws:...:targetgroup/boa-grafana-tg/REPLACE_ME
+groupID: sg-REPLACE_ME
+```
+
+Terraform 이 `grafana_target_group_arn` 으로 output 을 내보내고 있으므로 거기서 꺼내 채워야 한다. 이것은 **Grafana 를 ALB 로 여는 경로**이고, 수집기 문제와 무관하다. 안 채워도 나머지 15개는 정상 동작하며 `kubectl port-forward` 로는 접속된다.
+
+### 검증
+
+`kubectl kustomize` EKS·GKE 관측·applications 오버레이 렌더 성공. 렌더 결과의 `blocked_values` 값이 `\b[0-9]{10}\b` 로 나온다.
+
+저장소 전체에서 전방·후방 탐색 문법을 재검색해 남은 것이 없음을 확인했다.
+
+**실행으로만 확인되는 것** — 수집기가 실제로 기동하는지. `kubectl -n monitoring get pods` 에서 `otel-gateway-collector` 가 `2/2 Running` 이면 해소다.
