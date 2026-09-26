@@ -16,9 +16,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - name: Show expected OIDC subject
+        run: |
+          echo "repository=$GITHUB_REPOSITORY"
+          echo "ref=$GITHUB_REF"
+
+      - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: arn:aws:iam::769413326616:role/boa-github-argo-workflows-deploy-dev
           aws-region: ${{ env.AWS_REGION }}
