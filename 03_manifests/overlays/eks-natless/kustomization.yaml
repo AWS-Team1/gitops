@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../eks
+images:
+  - name: public.ecr.aws/docker/library/busybox
+    newName:
+    769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-busybox
+    newTag: 1.36.1
+  - name: postgres
+    newName:
+    769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-postgres
+    newTag: "16"
