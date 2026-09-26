@@ -55,7 +55,7 @@ jobs:
           sed -i "s|/boa/database/|${AWS_SECRET_PREFIX}/database/|g" "$rendered"
           sed -i "s|/boa/jwt/|${AWS_SECRET_PREFIX}/jwt/|g" "$rendered"
           test "$(grep -c 'secret:rds!db-' "$rendered")" -eq 1
-          sed -i "/secret:rds!db-/c\        - objectName: \"${RDS_MASTER_SECRET_ARN}\" # GitHub Actions runtime render" "$rendered"
+          sed -i -E "s|arn:aws:secretsmanager:[^:\"]+:[0-9]{12}:secret:rds!db-[^\"]+|${RDS_MASTER_SECRET_ARN}|g" "$rendered"
 
           grep -Fq "$RDS_MASTER_SECRET_ARN" "$rendered"
           ! grep -q 'objectName: "/boa/' "$rendered"          
@@ -79,6 +79,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           version="0.1.0-dev.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          helm template bank-of-anthos ./charts/boa-platform-chart \
+            --namespace bank-of-anthos >/dev/null          
           helm package ./charts/boa-platform-chart \
             --version "$version" \
             --app-version "$GITHUB_SHA" \
