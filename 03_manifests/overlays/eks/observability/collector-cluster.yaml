@@ -1,0 +1,118 @@
+# =========================================================
+# 수집기 클러스터 (Deployment 모드, replicas 1)
+#
+# k8s_cluster 수신기 전용이다. 이 수신기는 API 서버에 클러스터 전체를 물어보므로
+# 인스턴스가 둘이면 같은 지표가 두 번 들어온다. replicas 를 1 로 고정하는 것이
+# 이 파일의 존재 이유다 — 게이트웨이(replicas 2)에 합칠 수 없다.
+#
+# 여기서 나오는 것이 kube-state-metrics 가 주던 값들이다.
+#   k8s.deployment.desired / .available
+#   k8s.pod.phase
+#   k8s.hpa.current_replicas / .desired_replicas
+#   k8s.job.failed_pods
+#   k8s.node.condition_ready
+#
+# CloudWatch Container Insights 애드온을 쓰지 않기로 했으므로 이 자리가 비어 있었다.
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-cluster
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  mode: deployment
+
+  # 늘리면 지표가 중복된다. 이 값을 바꾸지 않는다.
+  replicas: 1
+
+  serviceAccount: otel-collector
+
+  image: otel/opentelemetry-collector-contrib:0.137.0
+
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 192Mi
+
+  config:
+    receivers:
+      k8s_cluster:
+        collection_interval: 30s
+        auth_type: serviceAccount
+
+        # 노드 상태를 어떤 지표로 뽑을지. Ready 만으로는 디스크·메모리 압박을 놓친다.
+        node_conditions_to_report:
+          - Ready
+          - MemoryPressure
+          - DiskPressure
+          - PIDPressure
+
+        allocatable_types_to_report:
+          - cpu
+          - memory
+          - pods
+
+      # 클러스터 이벤트. OOMKilled · FailedScheduling · Unhealthy 같은 것이
+      # 지표가 아니라 이벤트로만 나온다. 페일오버 원인 추적에 이게 필요하다.
+      k8sobjects:
+        auth_type: serviceAccount
+
+        objects:
+          - name: events
+            mode: watch
+            group: events.k8s.io
+
+            # 정상 이벤트까지 받으면 양이 많다. 경고만 받는다.
+            field_selector: type=Warning
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+
+      resource:
+        attributes:
+          - key: k8s.cluster.name
+            value: boa-eks
+            action: upsert
+          - key: cloud.provider
+            value: aws
+            action: upsert
+
+      batch:
+        send_batch_size: 8192
+        timeout: 5s
+
+    exporters:
+      otlp:
+        endpoint: otel-gateway-collector.monitoring.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+        retry_on_failure:
+          enabled: true
+
+        sending_queue:
+          enabled: true
+          queue_size: 500
+
+    service:
+      telemetry:
+        logs:
+          level: info
+
+      pipelines:
+        metrics:
+          receivers: [k8s_cluster]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+
+        logs:
+          receivers: [k8sobjects]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]

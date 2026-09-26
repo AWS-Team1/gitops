@@ -1,0 +1,103 @@
+# 자동계측 정의. 오퍼레이터의 변경 웹훅이 이 CR 을 읽어서
+# 파드에 초기화 컨테이너와 환경변수를 주입한다.
+#
+# 앱 파드의 어노테이션이 이것을 이름으로 가리킨다 —
+#   instrumentation.opentelemetry.io/inject-java: "bank-of-anthos/boa"
+# 값은 <이 CR 의 네임스페이스>/<이 CR 의 이름> 이다.
+#
+# 이 CR 이 bank-of-anthos 네임스페이스에 있는 이유 — 웹훅은 어노테이션 값을
+# "<ns>/<name>" 으로 해석하므로 다른 네임스페이스도 되지만, 앱과 같은 곳에 두면
+# 앱만 보고도 무엇이 주입되는지 추적된다.
+#
+# 앱 소스는 건드리지 않는다. 자바는 JAVA_TOOL_OPTIONS 로 에이전트가 붙고,
+# 파이썬은 opentelemetry-instrument 래퍼가 붙는다.
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: boa
+  namespace: bank-of-anthos
+  annotations:
+    # 앱 파드보다 먼저 존재해야 웹훅이 주입할 대상을 찾는다.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  exporter:
+    # 수집기 게이트웨이의 Service 다. 오퍼레이터가 만드는 Service 이름은
+    # <OpenTelemetryCollector 이름>-collector 규칙이다.
+    endpoint: http://otel-gateway-collector.monitoring.svc.cluster.local:4318
+
+  propagators:
+    - tracecontext
+    - baggage
+
+  sampler:
+    # 부모가 샘플링됐으면 따라가고, 루트면 비율로 결정한다.
+    # frontend 가 루트 스팬을 만들므로 실질적으로 frontend 의 비율이 전체를 정한다.
+    type: parentbased_traceidratio
+    argument: "1.0"
+
+  # 모든 언어에 공통으로 들어가는 환경변수.
+  env:
+    - name: OTEL_EXPORTER_OTLP_PROTOCOL
+      value: http/protobuf
+
+    # 리소스 속성. k8s.* 는 수집기의 k8sattributes 프로세서가 채우므로
+    # 여기서는 배포 환경만 붙인다.
+    - name: OTEL_RESOURCE_ATTRIBUTES
+      value: deployment.environment=dev
+
+  java:
+    # 업스트림 오퍼레이터 기본 이미지. 태그를 고정해 두어야 웹훅이 조용히
+    # 버전을 올려 계측 동작이 바뀌는 일을 막는다.
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:2.11.0
+
+    env:
+      # 자바 에이전트가 기본으로 켜는 계측 중 이 앱에 불필요한 것을 끈다.
+      # jdbc 는 남긴다 — ledger 3종의 DB 호출이 트레이스의 핵심이다.
+      - name: OTEL_INSTRUMENTATION_COMMON_DEFAULT_ENABLED
+        value: "true"
+
+      # Guava LoadingCache 는 계측 대상이 아니다. 캐시 적중/미스는 별도 지표로
+      # 잡아야 하고, 트레이스에 넣으면 스팬 수가 폭발한다.
+      - name: OTEL_INSTRUMENTATION_GUAVA_ENABLED
+        value: "false"
+
+      # 액추에이터·헬스체크 경로를 스팬으로 만들지 않는다. kubelet 의 프로브가
+      # 초당 여러 번 들어오므로 그대로 두면 트레이스가 프로브로 가득 찬다.
+      - name: OTEL_INSTRUMENTATION_HTTP_SERVER_EXPERIMENTAL_CAPTURE_HEADERS
+        value: ""
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+  python:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:0.58b0
+
+    env:
+      # 파이썬 SDK 의 기본 프로토콜은 grpc 다. 위 exporter 가 4318(HTTP)이므로
+      # 언어별로도 맞춰 준다 — 안 맞으면 파이썬 3종만 전송이 실패한다.
+      - name: OTEL_EXPORTER_OTLP_PROTOCOL
+        value: http/protobuf
+
+      # gunicorn 프리포크 대응. SDK 를 포크 이후에 초기화하게 한다.
+      # 이것으로 해결되지 않으면 gunicorn.conf.py 의 post_fork 훅이 필요하고,
+      # 그때는 이미지 재빌드 = 앱 코드 수정이 된다(변경 내역의 미결 항목).
+      - name: OTEL_PYTHON_DISABLED_INSTRUMENTATIONS
+        value: ""
+
+      # 로그 계측. frontend 의 logging.conf 가 propagate=0 이라 루트 로거에
+      # 붙는 핸들러를 타지 않을 수 있다 — 검증 항목이다.
+      - name: OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED
+        value: "true"
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 128Mi
+      requests:
+        cpu: 50m
+        memory: 64Mi

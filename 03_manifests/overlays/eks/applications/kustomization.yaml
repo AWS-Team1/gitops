@@ -6,3 +6,5 @@ resources:
   - accounts.yaml
   - ledger.yaml
   - frontend.yaml
+  - observability-platform.yaml
+  - observability.yaml

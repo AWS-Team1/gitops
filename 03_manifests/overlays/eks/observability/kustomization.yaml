@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# 네임스페이스를 지정하지 않는다. 이 오버레이의 리소스가 monitoring 과
+# bank-of-anthos 두 곳에 걸쳐 있고(Instrumentation 이 후자), 각 파일이
+# metadata.namespace 를 직접 갖고 있다.
+
+resources:
+  - ../../../base/observability
+  - rbac.yaml
+  - secrets.yaml
+  - collector-gateway.yaml
+  - collector-agent.yaml
+  - collector-cluster.yaml
+  - whatap-agent.yaml
+  - grafana.yaml

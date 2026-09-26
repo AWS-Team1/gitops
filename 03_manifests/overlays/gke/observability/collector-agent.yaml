@@ -1,0 +1,167 @@
+# =========================================================
+# 수집기 에이전트 (DaemonSet 모드)
+#
+# 게이트웨이와 나눈 이유 — 아래 세 수신기는 노드마다 하나씩 있어야 한다.
+#   kubeletstats : 자기 노드의 kubelet 에 물어본다
+#   hostmetrics  : 자기 노드의 /proc 를 읽는다
+#   filelog      : 자기 노드의 컨테이너 로그 파일을 읽는다
+#
+# k8s_cluster 만은 클러스터당 하나여야 하는데(중복 집계 방지) 데몬셋에 두면
+# 노드 수만큼 중복된다. 그래서 별도 Deployment 로 뺐다 — collector-cluster.yaml.
+#
+# 이 에이전트는 클라우드로 직접 내보내지 않는다. 게이트웨이에 OTLP 로 넘기고
+# 마스킹·내보내기는 게이트웨이가 한 곳에서 처리한다. 마스킹 지점을 하나로
+# 유지하려는 것이다 — 두 곳에 두면 한쪽을 고칠 때 다른 쪽을 잊는다.
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-agent
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  mode: daemonset
+  serviceAccount: otel-collector
+
+  image: otel/opentelemetry-collector-contrib:0.137.0
+
+  # kubeletstats 가 자기 노드를 찾는 데 쓴다.
+  env:
+    - name: K8S_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+
+  # 노드당 슬롯이 t3.medium 에서 17개뿐이다. 요청량을 작게 잡는다.
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 192Mi
+
+  # 컨테이너 로그 파일을 읽으려면 호스트 경로가 필요하다.
+  volumes:
+    - name: varlogpods
+      hostPath:
+        path: /var/log/pods
+    - name: varlibdockercontainers
+      hostPath:
+        path: /var/lib/docker/containers
+
+  volumeMounts:
+    - name: varlogpods
+      mountPath: /var/log/pods
+      readOnly: true
+    - name: varlibdockercontainers
+      mountPath: /var/lib/docker/containers
+      readOnly: true
+
+  # 컨트롤 플레인 노드가 생기더라도 로그를 놓치지 않게 한다.
+  tolerations:
+    - operator: Exists
+
+  config:
+    receivers:
+      # 노드·파드·컨테이너 자원 사용량. CloudWatch Container Insights 애드온을
+      # 쓰지 않기로 했으므로 이것이 그 자리를 대신한다.
+      kubeletstats:
+        collection_interval: 30s
+        auth_type: serviceAccount
+        endpoint: https://${env:K8S_NODE_NAME}:10250
+        insecure_skip_verify: true
+
+        metric_groups:
+          - node
+          - pod
+          - container
+
+        extra_metadata_labels:
+          - container.id
+
+      # 노드 OS 지표. kubeletstats 가 안 주는 디스크·네트워크를 채운다.
+      hostmetrics:
+        collection_interval: 30s
+        root_path: /
+
+        scrapers:
+          cpu: {}
+          load: {}
+          memory: {}
+          disk: {}
+          filesystem:
+            exclude_mount_points:
+              mount_points: ["/var/lib/kubelet/*"]
+              match_type: regexp
+          network: {}
+
+      # 컨테이너 stdout/stderr.
+      #
+      # 주의 — 자동계측의 로그 어피ender 가 같은 로그를 OTLP 로도 보낸다.
+      # 즉 앱 로그는 두 경로로 들어온다. 아래 exclude 로 앱 네임스페이스를 빼서
+      # 중복을 막고, 앱 로그는 OTLP 경로만 쓴다. 여기서는 플랫폼 로그만 모은다.
+      filelog:
+        include:
+          - /var/log/pods/*/*/*.log
+
+        exclude:
+          # 앱 로그는 OTLP 로 들어온다. 여기서 또 읽으면 두 배가 된다.
+          - /var/log/pods/bank-of-anthos_*/*/*.log
+          # 자기 자신의 로그를 읽으면 되먹임 루프가 된다.
+          - /var/log/pods/monitoring_*/*/*.log
+
+        start_at: end
+        include_file_path: true
+        include_file_name: false
+
+        operators:
+          - id: container-parser
+            type: container
+
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+
+      # 데몬셋이므로 자기 노드 이름을 리소스에 붙인다.
+      resource:
+        attributes:
+          - key: k8s.node.name
+            value: ${env:K8S_NODE_NAME}
+            action: upsert
+
+      batch:
+        send_batch_size: 8192
+        timeout: 5s
+
+    exporters:
+      # 게이트웨이로 넘긴다. 마스킹과 목적지 분기는 게이트웨이가 한다.
+      otlp:
+        endpoint: otel-gateway-collector.monitoring.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+        retry_on_failure:
+          enabled: true
+
+        sending_queue:
+          enabled: true
+          queue_size: 500
+
+    service:
+      telemetry:
+        logs:
+          level: info
+
+      pipelines:
+        metrics:
+          receivers: [kubeletstats, hostmetrics]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]
+
+        logs:
+          receivers: [filelog]
+          processors: [memory_limiter, resource, batch]
+          exporters: [otlp]

@@ -1,0 +1,87 @@
+# =========================================================
+# 와탭 쿠버네티스 에이전트 — WhatapAgent CR
+#
+# 이 파일이 없으면 whatap-operator 는 설치되지만 아무것도 하지 않는다.
+# 오퍼레이터는 WhatapAgent CR 을 감시하다가 그것이 생겨야
+# master-agent(Deployment)와 node-agent(DaemonSet)를 만든다.
+#
+# 만드는 경로 — 구성도의 경로 4
+#   node-agent (노드마다) ─┐
+#   master-agent          ─┴→ 와탭 쿠버네티스 제품 프로젝트
+#
+# 이 경로는 OpenTelemetry 와 무관하다. 수집기도 사이드카도 거치지 않고
+# 에이전트가 직접 수집 서버로 보낸다. 그래서 OTel 이 전부 죽어도 살아 있다.
+#
+# ---------------------------------------------------------
+# 자격증명 — 이 네임스페이스에서만 별도로 준비해야 한다
+# ---------------------------------------------------------
+# 앱과 수집기는 GKE Secret Manager 애드온으로 값을 받는다.
+# 그런데 그 경로가 여기서는 쓰이지 않는다. 이유 두 가지다.
+#
+#   1. 쿠버네티스 Secret 은 네임스페이스를 넘지 못한다.
+#      overlays/gke/observability/secrets.yaml 이 만드는 whatap-observability
+#      Secret 은 monitoring 네임스페이스에 있고, 이 에이전트는
+#      whatap-monitoring 에 있다. 읽을 수 없다.
+#
+#   2. GCP 쪽 Workload Identity 바인딩도 monitoring 네임스페이스 기준이다.
+#      whatap-monitoring 의 ServiceAccount 에는 바인딩이 없어
+#      Secret Manager 를 읽을 권한 자체가 없다.
+#
+# 그래서 이 Secret 만은 사람이 한 번 만든다. 와탭 공식 문서의 설치 절차도
+# 같은 방식이다(kubectl create secret generic whatap-credentials).
+# 런북 05단계에 명령이 있다.
+#
+#   kubectl create secret generic whatap-credentials \
+#     --namespace whatap-monitoring \
+#     --from-literal WHATAP_LICENSE=<쿠버네티스 제품 라이선스> \
+#     --from-literal WHATAP_HOST=<수집 서버 주소> \
+#     --from-literal WHATAP_PORT=6600
+#
+# Git 에 라이선스 키를 넣지 않는다는 원칙은 그대로 지켜진다.
+#
+# 더 자동화하려면 whatap-monitoring 용 ServiceAccount 에 Workload Identity 를
+# 추가하고 SecretProviderClass + 마운트 파드를 이 네임스페이스에도 두면 된다.
+# GCP IAM 변경이 필요하므로 이번 범위에서는 하지 않았다(미결 항목).
+# =========================================================
+apiVersion: monitoring.whatap.com/v2alpha1
+kind: WhatapAgent
+metadata:
+  name: whatap
+  namespace: whatap-monitoring
+  annotations:
+    # CRD 는 boa-whatap-operator Application(앱 단위 wave -15)이 설치한다.
+    # 이 Application 은 wave -5 이므로 그보다 늦다. 앱 내부 wave 는
+    # 수집기와 같은 10 을 쓴다 — 이 CR 은 monitoring 쪽 시크릿에 의존하지 않는다.
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  features:
+    k8sAgent:
+      # 클러스터 단위 구성 정보를 모아 보낸다. 노드당이 아니라 클러스터당 하나다.
+      masterAgent:
+        enabled: true
+
+      # 노드마다 뜨는 DaemonSet. 컨테이너 런타임 소켓을 읽어 파드·컨테이너
+      # 지표를 만든다. 소켓 경로가 틀리면 파드는 Running 인데 지표가 비어 있다.
+      nodeAgent:
+        enabled: true
+
+        # GKE 의 기본 런타임이다. 와탭 콘솔에서는 환경 = GKE 를 함께 고른다. 와탭 콘솔의 에이전트 설치 화면에서
+        # 런타임을 고르면 아래 두 값이 자동으로 채워진다.
+        runtime: containerd
+        runtimeSocketPath: /var/run/containerd/containerd.sock
+
+      # GPU 노드가 없다.
+      gpuMonitoring:
+        enabled: false
+
+  # ---------------------------------------------------------
+  # apm.instrumentation 은 켜지 않는다 — 의도적으로 비워 둔다
+  # ---------------------------------------------------------
+  # 와탭 오퍼레이터에도 자바·파이썬 자동계측 기능이 있다. 켜면 같은 파드에
+  # 자바 에이전트가 둘 붙고 JAVA_TOOL_OPTIONS 가 충돌해 앱이 기동하지 못한다.
+  #
+  # 이 설계는 계측을 OpenTelemetry 로 통일한다(base/observability/instrumentation.yaml).
+  # 그래야 목적지를 바꿀 때 수집기의 exporter 블록만 교체하면 된다.
+  #
+  # 같은 함정이 와탭 콘솔에도 있다 — 관리 > 에이전트 설치 화면의
+  # "APM 자동 설치" 체크박스가 이 필드다. 반드시 끈 상태로 파일을 받는다.

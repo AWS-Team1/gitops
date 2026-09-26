@@ -6,14 +6,73 @@ metadata:
   annotations:
     argocd.argoproj.io/sync-wave: "-30"
 spec:
+  # ---------------------------------------------------------
+  # 허용 저장소
+  # ---------------------------------------------------------
+  # 관측 플랫폼이 Helm 차트를 쓰므로 차트 저장소를 명시적으로 허용해야 한다.
+  # 여기 없는 저장소를 참조하면 Application 이 ComparisonError 가 아니라
+  # "application repo ... is not permitted in project" 로 막힌다.
   sourceRepos:
     - https://github.com/AWS-Team1/gitops.git
+    - https://charts.jetstack.io
+    - https://open-telemetry.github.io/opentelemetry-helm-charts
+    - https://whatap-cloud.github.io/whatap-operator
+
+  # ---------------------------------------------------------
+  # 허용 대상 네임스페이스
+  # ---------------------------------------------------------
+  # 관측 스택이 앱 네임스페이스 밖에 산다. 네 곳이 늘었다.
   destinations:
     - server: https://kubernetes.default.svc
       namespace: bank-of-anthos
+
+    # 수집기 · Grafana
+    - server: https://kubernetes.default.svc
+      namespace: monitoring
+
+    # 오퍼레이터 웹훅 인증서 발급
+    - server: https://kubernetes.default.svc
+      namespace: cert-manager
+
+    # OpenTelemetry 오퍼레이터
+    - server: https://kubernetes.default.svc
+      namespace: opentelemetry-operator-system
+
+    # 와탭 쿠버네티스 에이전트
+    - server: https://kubernetes.default.svc
+      namespace: whatap-monitoring
+
+  # ---------------------------------------------------------
+  # 허용 클러스터 스코프 리소스
+  # ---------------------------------------------------------
+  # 이전에는 Namespace 하나뿐이었다. 관측 스택이 아래를 요구한다.
+  #   CustomResourceDefinition : cert-manager · 오퍼레이터 · 와탭 차트가 CRD 를 설치
+  #   ClusterRole/Binding      : 수집기가 파드·노드를 클러스터 전역으로 읽는다
+  #   웹훅 설정                : 오퍼레이터의 자동계측 변경 웹훅
+  #
+  # 주의 — 이것은 권한 확대다. 이 프로젝트의 Application 이 클러스터 전역
+  # RBAC 를 만들 수 있게 된다는 뜻이다. 앱 Application(boa-accounts 등)은
+  # 이 리소스를 쓰지 않지만 프로젝트 단위 허용이라 구분되지 않는다.
+  # 더 좁히려면 관측용 AppProject 를 따로 만드는 편이 맞다(미결 항목).
   clusterResourceWhitelist:
     - group: ""
       kind: Namespace
+
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+
   namespaceResourceWhitelist:
     - group: "*"
       kind: "*"
