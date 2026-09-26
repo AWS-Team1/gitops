@@ -1,0 +1,6 @@
+apiVersion: v2
+name: boa-platform-chart
+description: Argo Workflows deployment pipeline smoke test
+type: application
+version: 0.1.0
+appVersion: "poc"
