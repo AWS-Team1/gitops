@@ -694,3 +694,7 @@ AppProject 에 `external-secrets` 네임스페이스와 `ClusterSecretStore`(클
 기존 CloudWatch 로그 그룹과 과거 데이터는 삭제하지 않는다. 공통 `redaction`·
 `transform` processor도 유지하므로 Whatap과 S3로 나가는 데이터의 사전 마스킹은
 계속 적용된다.
+
+배포 브랜치 병합 전에 `boa-observability-bootstrap`의 `targetRevision`도 `HEAD`에서
+`dev-0922`로 고정했다. 루트 Application이 추적하는 브랜치와 자식 Application이
+읽는 브랜치가 달라 신규 bootstrap 디렉터리를 찾지 못하는 상황을 막기 위해서다.
