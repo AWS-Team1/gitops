@@ -493,3 +493,107 @@ service:
 ### 검증 (9.1 ~ 9.4 누적)
 
 `kubectl kustomize` 7개 경로 전부 렌더 성공. `logs/audit` 파이프라인과 `filter/app-only` 가 렌더 결과에 나오고, 계측 어노테이션은 EKS·GKE 모두 `inject-java` 3 · `inject-python` 3 으로 회귀 없음.
+
+---
+
+## 10. Argo CD 첫 배포에서 드러난 Helm 결함 두 건 (2026-09-26)
+
+`dev-0922` 병합 뒤 실제 클러스터에 싱크하니 `boa-observability` 가 **OutOfSync / Missing**
+으로 멈췄다. 원인은 둘 다 `applications/observability-platform.yaml` 이었다.
+
+### 10.1 OpenTelemetry 오퍼레이터 — 차트에 없는 values 키
+
+```
+admissionWebhooks:
+  autoInstrumentationWebhook:     # ← 차트 0.99.0 에 없는 키
+    enabled: true
+```
+
+차트 `values.schema.json` 의 `admissionWebhooks` 가 **`additionalProperties: false`** 라
+스키마 검증에서 막히고, Helm 이 렌더를 시작하지도 못한다. Argo CD 가 보는 증상은
+"설치가 시작되지 않음"이다. 저장소·차트 버전 자체는 정상이었다.
+
+**확인한 것** — `opentelemetry-operator-0.99.0.tgz` 를 내려 직접 읽었다.
+
+| | 값 |
+|---|---|
+| 스키마가 허용하는 `admissionWebhooks` 하위 키 | create · servicePort · failurePolicy · secretName · pods · namePrefix · timeoutSeconds · namespaceSelector · objectSelector · certManager · autoGenerateCert · certFile · keyFile · caFile · serviceAnnotations · secretAnnotations · secretLabels |
+| 계측 주입 웹훅을 켜는 스위치 | **없다.** `admissionWebhooks.create`(기본 `true`)면 파드 변경 웹훅 `mpod.kb.io` 가 무조건 생성된다 (`templates/admission-webhooks/operator-webhook-with-cert-manager.yaml:91`) |
+| `manager.resources` | 유효하다 (`values.yaml:108`). 이건 문제가 아니었다 |
+
+그래서 잘못된 블록을 **지우는 것이 곧 수정**이다. 기능은 줄지 않는다. 대신 스키마가
+지원하는 `admissionWebhooks.pods.failurePolicy: Ignore` 를 명시했다 — 웹훅 파드가
+준비되기 전이라도 앱 파드 생성이 막히지 않는다. 트레이드오프는 그 사이에 뜬 파드에
+계측이 붙지 않는 것이고, 회피 방법은 앱 파드를 한 번 굴리는 것이다.
+
+### 10.2 와탭 오퍼레이터 — Helm 저장소 주소가 404
+
+`https://whatap-cloud.github.io/whatap-operator` 는 존재하지 않는다. `index.yaml` 이
+404 라 차트 다운로드 자체가 실패했다.
+
+**확인한 것** — GitHub 조직 `whatap-cloud` 는 공개 저장소가 없고, 차트는 `whatap/helm`
+저장소에 있다. 두 차트 버전의 README 가 모두 같은 주소를 안내한다.
+
+```
+helm repo add whatap https://whatap.github.io/helm/     # README.md:13
+```
+
+| 항목 | 이전 | 이후 |
+|---|---|---|
+| `repoURL` | `https://whatap-cloud.github.io/whatap-operator` (404) | `https://whatap.github.io/helm` |
+| `targetRevision` | 1.7.6 | **1.9.11** |
+
+**버전을 올린 이유 두 가지.**
+
+1. **1.7.6 은 오퍼레이터 이미지를 `latest` 로 당긴다** (`values.yaml:4`, `pullPolicy: Always`).
+   Git 을 안 건드려도 오퍼레이터 바이너리가 바뀔 수 있다는 뜻이고, DR 기준선으로 쓸 수 없다.
+   1.9.11 은 `appVersion: 3.0.20` 으로 고정된다.
+2. **`nodeAgent.runtimeSocketPath` 가 1.7.6 CRD 에는 없다.** 우리 `WhatapAgent` CR 이 그
+   필드를 쓰는데, 구조 스키마 pruning 때문에 **오류 없이 조용히 잘려 나간다.** 1.9.11
+   CRD 에는 있다(`crd-whatapagents.yaml:5983`).
+
+1.9.11 이 CRD 3종(`WhatapPodMonitor` · `WhatapServiceMonitor` · `WhatapStaticEndpoint`)을
+더 설치하지만 쓰지 않으므로 무해하다. CRD 가 커서 `ServerSideApply=true` 가 필요한데
+이미 켜져 있다.
+
+### 10.3 같이 고친 values 오류 — 라이선스 시크릿 참조
+
+```
+whatap:
+  licenseSecret:            # ← 차트에 없는 키. 아무 일도 하지 않았다
+    name: whatap-observability
+    key: kubernetes_license
+```
+
+와탭 차트에는 `values.schema.json` 이 **없다.** 그래서 이 블록은 렌더를 깨뜨리지 않고
+**조용히 무시됐다** — 10.2 를 고쳐 차트가 내려오기 시작하면 그때 문제가 될 자리였다.
+
+차트가 실제로 보는 값은 `credentials.{create,license,host,port}` 하나뿐이고,
+**시크릿 이름은 `whatap-credentials` 로 고정되어 있다**
+(`templates/secret-whatap-credentials.yaml:6`). values 로 바꿀 수 없다. 키 이름도
+`WHATAP_LICENSE` · `WHATAP_HOST` · `WHATAP_PORT` 로 고정이다.
+
+`credentials.create: false` 로 두어 차트가 시크릿을 만들지 않게 했다. 라이선스는
+Git 에 들어가지 않고, 사람이 한 번 만든다 —
+`overlays/*/observability/whatap-agent.yaml` 머리말의 명령 그대로다.
+
+### 10.4 정정 — 로그 삼중 수집 우려는 근거가 없었다
+
+`observability-platform.yaml` 머리말에 "와탭 노드 에이전트가 컨테이너 로그를 수집하므로
+끄지 않으면 같은 로그가 세 번 들어간다"고 적어 두었는데, **틀렸다.**
+
+`WhatapAgent` CRD(1.9.11)에 로그 수집 필드가 **아예 없고**,
+`templates/agent-node-configmap.yaml` 이 만드는 `whatap.node.conf` 에도 로그 설정이
+없다. 노드 에이전트는 노드·파드·컨테이너 **자원 지표만** 보낸다. 우리 수집기의
+`filelog` 와 겹치지 않는다. 주석을 근거와 함께 고쳤다.
+
+### 검증
+
+`kubectl kustomize` EKS·GKE 12개 오버레이 루트 전부 렌더 성공. `WhatapAgent` 렌더 결과에
+`runtimeSocketPath` 가 남아 있고, 계측 어노테이션은 `inject-java` 3 · `inject-python` 3
+으로 회귀 없음.
+
+**여전히 검증 못 한 것** — 차트 1.9.11 오퍼레이터(이미지 3.0.20)의 실제 동작. 확인
+방법은 싱크 후 `kubectl -n whatap-monitoring get deploy,ds` 로 master-agent 1개 ·
+node-agent 노드 수만큼이 Ready 인지, 그리고 와탭 쿠버네티스 프로젝트 화면에 노드가
+올라오는지 본다.

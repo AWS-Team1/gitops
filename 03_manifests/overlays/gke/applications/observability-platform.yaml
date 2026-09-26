@@ -94,13 +94,14 @@ spec:
       releaseName: opentelemetry-operator
 
       valuesObject:
-        # 이 차트는 manager 이미지 저장소를 명시적으로 요구한다.
         manager:
+          # 오퍼레이터가 만드는 수집기 파드의 기본 이미지다. 우리 CR 이
+          # spec.image 로 덮어쓰므로 실제로는 쓰이지 않지만, 차트가 이 값을
+          # --collector-image 인자로 넘기므로 저장소는 명시해 둔다.
           collectorImage:
             repository: otel/opentelemetry-collector-contrib
 
-          # 오퍼레이터가 만드는 수집기의 기본 이미지다. 우리 CR 이 spec.image 로
-          # 덮어쓰므로 실제로는 쓰이지 않지만, 비워 두면 차트가 렌더에 실패한다.
+          # 오퍼레이터 자신의 자원 한도다(차트 기본값은 비어 있음).
           resources:
             limits:
               cpu: 200m
@@ -114,10 +115,24 @@ spec:
             # cert-manager 가 웹훅 인증서를 발급한다. 위 Application 이 먼저다.
             enabled: true
 
-          # autoInstrumentation 웹훅. 이것이 어노테이션을 읽는 주체다 —
-          # 끄면 계측이 전혀 붙지 않는다.
-          autoInstrumentationWebhook:
-            enabled: true
+          # 계측 주입 웹훅을 켜고 끄는 값은 이 차트에 없다.
+          # admissionWebhooks.create(기본 true)면 파드 변경 웹훅(mpod.kb.io)이
+          # 무조건 함께 만들어진다 — 0.99.0
+          # templates/admission-webhooks/operator-webhook-with-cert-manager.yaml:91.
+          #
+          # 여기에 autoInstrumentationWebhook.enabled 를 넣었다가 차트
+          # values.schema.json 의 admissionWebhooks.additionalProperties:false
+          # 에 걸려 Argo CD 가 렌더 단계에서 실패했다(2026-09-26). 스키마가
+          # 허용하는 하위 키는 create·servicePort·failurePolicy·secretName·
+          # pods·namePrefix·timeoutSeconds·namespaceSelector·objectSelector·
+          # certManager·autoGenerateCert·certFile·keyFile·caFile·
+          # serviceAnnotations·secretAnnotations·secretLabels 뿐이다.
+          pods:
+            # 웹훅 파드가 준비되지 않았을 때 앱 파드 생성을 막지 않는다.
+            # Fail 로 두면 오퍼레이터 장애가 앱 배포 장애로 번진다.
+            # 대신 그 사이에 뜬 파드에는 계측이 붙지 않으므로, 오퍼레이터를
+            # 손본 뒤에는 앱 파드를 한 번 굴려야 한다.
+            failurePolicy: Ignore
 
         # 오퍼레이터 자신의 지표는 쓰지 않는다.
         kubeRBACProxy:
@@ -151,10 +166,10 @@ spec:
 # 노드·파드 자원 지표를 쿠버네티스 제품에서 본다. 둘은 별개 프로젝트이고
 # 액세스 키도 다르다.
 #
-# 중복 주의 — 이 에이전트의 노드 에이전트가 컨테이너 로그를 수집한다.
-# 우리 수집기의 filelog 가 이미 플랫폼 로그를 읽고 있고, 앱 로그는 OTLP 로
-# 들어온다. 와탭 노드 에이전트의 로그 수집을 끄지 않으면 같은 로그가 세 번
-# 들어갈 수 있다 — 아래 values 에서 명시적으로 끈다.
+# 로그 중복은 없다(확인함) — 노드 에이전트는 노드·파드·컨테이너 자원 지표만
+# 보낸다. 차트 1.9.11 의 WhatapAgent CRD 에 로그 수집 필드가 아예 없고,
+# templates/agent-node-configmap.yaml 이 만드는 whatap.node.conf 에도
+# 로그 관련 설정이 없다. 우리 수집기의 filelog 와 겹치지 않는다.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -166,21 +181,23 @@ spec:
   project: boa
 
   source:
-    repoURL: https://whatap-cloud.github.io/whatap-operator
+    repoURL: https://whatap.github.io/helm
     chart: whatap-operator
-    targetRevision: 1.7.6
+    targetRevision: 1.9.11
 
     helm:
       releaseName: whatap-operator
 
       valuesObject:
-        # 라이선스 키를 values 에 넣지 않는다. 오퍼레이터가 만드는 CR 에서
-        # 시크릿을 참조하게 하고, 시크릿은 Secrets Manager 에서 온다.
-        # 차트 버전에 따라 키 이름이 다르므로 apply 후 실제 필드를 확인한다.
-        whatap:
-          licenseSecret:
-            name: whatap-observability
-            key: kubernetes_license
+        # 라이선스 키를 values 에 넣지 않는다. create:false 로 두면 차트는
+        # 시크릿을 만들지 않고, 에이전트가 이 네임스페이스의 기존 시크릿을 읽는다.
+        #
+        # 시크릿 이름은 차트에 고정되어 있다 — whatap-credentials.
+        # values 로 바꿀 수 없다(templates/secret-whatap-credentials.yaml:6).
+        # 키 이름도 고정이다 — WHATAP_LICENSE · WHATAP_HOST · WHATAP_PORT.
+        # 만드는 명령은 overlays/*/observability/whatap-agent.yaml 머리말에 있다.
+        credentials:
+          create: false
 
   destination:
     server: https://kubernetes.default.svc
