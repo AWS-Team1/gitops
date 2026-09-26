@@ -9,3 +9,13 @@ images:
   - name: postgres
     newName: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-postgres
     newTag: "16"
+patches:
+  - target:
+      kind: Namespace
+      name: bank-of-anthos
+    patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: bank-of-anthos
+      $patch: delete
