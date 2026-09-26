@@ -493,3 +493,208 @@ service:
 ### 검증 (9.1 ~ 9.4 누적)
 
 `kubectl kustomize` 7개 경로 전부 렌더 성공. `logs/audit` 파이프라인과 `filter/app-only` 가 렌더 결과에 나오고, 계측 어노테이션은 EKS·GKE 모두 `inject-java` 3 · `inject-python` 3 으로 회귀 없음.
+
+---
+
+## 10. Argo CD 첫 배포에서 드러난 Helm 결함 두 건 (2026-09-26)
+
+`dev-0922` 병합 뒤 실제 클러스터에 싱크하니 `boa-observability` 가 **OutOfSync / Missing**
+으로 멈췄다. 원인은 둘 다 `applications/observability-platform.yaml` 이었다.
+
+### 10.1 OpenTelemetry 오퍼레이터 — 차트에 없는 values 키
+
+```
+admissionWebhooks:
+  autoInstrumentationWebhook:     # ← 차트 0.99.0 에 없는 키
+    enabled: true
+```
+
+차트 `values.schema.json` 의 `admissionWebhooks` 가 **`additionalProperties: false`** 라
+스키마 검증에서 막히고, Helm 이 렌더를 시작하지도 못한다. Argo CD 가 보는 증상은
+"설치가 시작되지 않음"이다. 저장소·차트 버전 자체는 정상이었다.
+
+**확인한 것** — `opentelemetry-operator-0.99.0.tgz` 를 내려 직접 읽었다.
+
+| | 값 |
+|---|---|
+| 스키마가 허용하는 `admissionWebhooks` 하위 키 | create · servicePort · failurePolicy · secretName · pods · namePrefix · timeoutSeconds · namespaceSelector · objectSelector · certManager · autoGenerateCert · certFile · keyFile · caFile · serviceAnnotations · secretAnnotations · secretLabels |
+| 계측 주입 웹훅을 켜는 스위치 | **없다.** `admissionWebhooks.create`(기본 `true`)면 파드 변경 웹훅 `mpod.kb.io` 가 무조건 생성된다 (`templates/admission-webhooks/operator-webhook-with-cert-manager.yaml:91`) |
+| `manager.resources` | 유효하다 (`values.yaml:108`). 이건 문제가 아니었다 |
+
+그래서 잘못된 블록을 **지우는 것이 곧 수정**이다. 기능은 줄지 않는다. 대신 스키마가
+지원하는 `admissionWebhooks.pods.failurePolicy: Ignore` 를 명시했다 — 웹훅 파드가
+준비되기 전이라도 앱 파드 생성이 막히지 않는다. 트레이드오프는 그 사이에 뜬 파드에
+계측이 붙지 않는 것이고, 회피 방법은 앱 파드를 한 번 굴리는 것이다.
+
+### 10.2 와탭 오퍼레이터 — Helm 저장소 주소가 404
+
+`https://whatap-cloud.github.io/whatap-operator` 는 존재하지 않는다. `index.yaml` 이
+404 라 차트 다운로드 자체가 실패했다.
+
+**확인한 것** — GitHub 조직 `whatap-cloud` 는 공개 저장소가 없고, 차트는 `whatap/helm`
+저장소에 있다. 두 차트 버전의 README 가 모두 같은 주소를 안내한다.
+
+```
+helm repo add whatap https://whatap.github.io/helm/     # README.md:13
+```
+
+| 항목 | 이전 | 이후 |
+|---|---|---|
+| `repoURL` | `https://whatap-cloud.github.io/whatap-operator` (404) | `https://whatap.github.io/helm` |
+| `targetRevision` | 1.7.6 | **1.9.11** |
+
+**버전을 올린 이유 두 가지.**
+
+1. **1.7.6 은 오퍼레이터 이미지를 `latest` 로 당긴다** (`values.yaml:4`, `pullPolicy: Always`).
+   Git 을 안 건드려도 오퍼레이터 바이너리가 바뀔 수 있다는 뜻이고, DR 기준선으로 쓸 수 없다.
+   1.9.11 은 `appVersion: 3.0.20` 으로 고정된다.
+2. **`nodeAgent.runtimeSocketPath` 가 1.7.6 CRD 에는 없다.** 우리 `WhatapAgent` CR 이 그
+   필드를 쓰는데, 구조 스키마 pruning 때문에 **오류 없이 조용히 잘려 나간다.** 1.9.11
+   CRD 에는 있다(`crd-whatapagents.yaml:5983`).
+
+1.9.11 이 CRD 3종(`WhatapPodMonitor` · `WhatapServiceMonitor` · `WhatapStaticEndpoint`)을
+더 설치하지만 쓰지 않으므로 무해하다. CRD 가 커서 `ServerSideApply=true` 가 필요한데
+이미 켜져 있다.
+
+### 10.3 같이 고친 values 오류 — 라이선스 시크릿 참조
+
+```
+whatap:
+  licenseSecret:            # ← 차트에 없는 키. 아무 일도 하지 않았다
+    name: whatap-observability
+    key: kubernetes_license
+```
+
+와탭 차트에는 `values.schema.json` 이 **없다.** 그래서 이 블록은 렌더를 깨뜨리지 않고
+**조용히 무시됐다** — 10.2 를 고쳐 차트가 내려오기 시작하면 그때 문제가 될 자리였다.
+
+차트가 실제로 보는 값은 `credentials.{create,license,host,port}` 하나뿐이고,
+**시크릿 이름은 `whatap-credentials` 로 고정되어 있다**
+(`templates/secret-whatap-credentials.yaml:6`). values 로 바꿀 수 없다. 키 이름도
+`WHATAP_LICENSE` · `WHATAP_HOST` · `WHATAP_PORT` 로 고정이다.
+
+`credentials.create: false` 로 두어 차트가 시크릿을 만들지 않게 했다. 라이선스는
+Git 에 들어가지 않고, 사람이 한 번 만든다 —
+`overlays/*/observability/whatap-agent.yaml` 머리말의 명령 그대로다.
+
+### 10.4 정정 — 로그 삼중 수집 우려는 근거가 없었다
+
+`observability-platform.yaml` 머리말에 "와탭 노드 에이전트가 컨테이너 로그를 수집하므로
+끄지 않으면 같은 로그가 세 번 들어간다"고 적어 두었는데, **틀렸다.**
+
+`WhatapAgent` CRD(1.9.11)에 로그 수집 필드가 **아예 없고**,
+`templates/agent-node-configmap.yaml` 이 만드는 `whatap.node.conf` 에도 로그 설정이
+없다. 노드 에이전트는 노드·파드·컨테이너 **자원 지표만** 보낸다. 우리 수집기의
+`filelog` 와 겹치지 않는다. 주석을 근거와 함께 고쳤다.
+
+### 검증
+
+`kubectl kustomize` EKS·GKE 12개 오버레이 루트 전부 렌더 성공. `WhatapAgent` 렌더 결과에
+`runtimeSocketPath` 가 남아 있고, 계측 어노테이션은 `inject-java` 3 · `inject-python` 3
+으로 회귀 없음.
+
+**여전히 검증 못 한 것** — 차트 1.9.11 오퍼레이터(이미지 3.0.20)의 실제 동작. 확인
+방법은 싱크 후 `kubectl -n whatap-monitoring get deploy,ds` 로 master-agent 1개 ·
+node-agent 노드 수만큼이 Ready 인지, 그리고 와탭 쿠버네티스 프로젝트 화면에 노드가
+올라오는지 본다.
+
+---
+
+## 11. 시크릿 자동화 — External Secrets Operator 도입 (2026-09-26)
+
+마운트 전용 파드와 수동 `kubectl create secret` 을 둘 다 없앴다. 범위는 **EKS 의 관측 스택만**이다. 앱 시크릿(`overlays/eks/shared/`)은 CSI 를 그대로 쓴다.
+
+### 11.1 왜 바꿨나
+
+Secrets Store CSI 드라이버는 컨트롤러가 아니라 **볼륨 플러그인**이다. "누군가 볼륨을 마운트할 때"만 Secrets Manager 를 읽는다. 그런데 수집기와 Grafana 는 볼륨을 쓰지 않고 `secretKeyRef` 로 env 만 읽는다. 아무도 마운트하지 않으면 Secret 이 영영 생기지 않는다.
+
+그래서 아무 일도 하지 않는 파드(`observability-secret-sync`)를 일부러 띄워 뒀었다. 여기서 세 가지가 따라왔다.
+
+1. 그 파드가 죽으면 Secret 이 갱신되지 않는다.
+2. CSI 는 **마운트한 파드의 자격증명**으로 읽는다. 네임스페이스마다 Pod Identity 연결이 필요하고, `whatap-monitoring` 에는 없어서 자동화가 불가능했다.
+3. 회전이 기본 꺼짐이라 키를 재발급해도 반영되지 않을 가능성이 있었다.
+
+GKE 는 이미 `SecretSync` **컨트롤러**를 쓰고 있어 이 문제가 없다. EKS 만 격차가 있었다.
+
+### 11.2 무엇이 생기고 사라졌나
+
+| | 이전 | 이후 |
+|---|---|---|
+| `monitoring` 시크릿 공급 | SecretProviderClass + pause 파드 | `ExternalSecret` 2개 |
+| `whatap-credentials` | 사람이 `kubectl create secret` | `ExternalSecret` (자동) |
+| 마운트 전용 파드 | 1개 (관측) | 0개 |
+| 키 회전 | 불확실 | `refreshInterval: 1h` |
+
+신규 디렉터리 `overlays/eks/bootstrap/` — `Namespace`(whatap-monitoring) · `ClusterSecretStore`(boa-aws) · `ExternalSecret`(whatap-credentials).
+
+신규 Application 2개 — `boa-external-secrets`(wave −28, Helm `external-secrets` 2.11.0) · `boa-observability-bootstrap`(wave −22).
+
+### 11.3 순서가 까다로운 지점
+
+**와탭 오퍼레이터 Deployment 자체가 `whatap-credentials` 를 `secretKeyRef` 로 읽고 `optional` 이 아니다**(차트 1.9.11 `templates/operator-deployment.yaml`). 시크릿이 없으면 오퍼레이터 파드가 기동조차 못 한다. 그 Application 은 wave −15 다.
+
+그래서 시크릿을 만드는 것을 관측 Application(−5)이 아니라 **별도 Application(−22)** 으로 뺐다. `whatap-monitoring` 네임스페이스도 거기서 명시적으로 만든다 — `CreateNamespace=true` 는 −15 라 늦고, 자동 생성된 네임스페이스에는 PSA 라벨을 붙일 수 없다.
+
+**남은 틈** — Argo CD 는 모르는 사용자 정의 리소스를 기본적으로 Healthy 로 친다. `ExternalSecret` 을 적용하자마자 다음 wave 로 넘어가므로 실제 Secret 생성까지의 몇 초는 보장되지 않는다. 그동안 오퍼레이터 파드는 `CreateContainerConfigError` 로 기다리다 kubelet 재시도로 회복한다. 엄밀히 막으려면 `argocd-cm` 에 `ExternalSecret` 헬스 판정을 넣어야 한다(미결).
+
+### 11.4 확인한 것
+
+차트 원본(`external-secrets-2.11.0.tgz`)을 내려 직접 읽었다.
+
+- API 는 **`external-secrets.io/v1`** 이다. `v1beta1` 은 폐기 대상이고 `crds.unsafeServeV1Beta1` 이 기본 `false`.
+- `ClusterSecretStore.spec.conditions` 는 `namespaces` · `namespaceRegexes` · `namespaceSelector` 를 받는다. `namespaces` 로 `monitoring` · `whatap-monitoring` 두 곳만 허용했다.
+- `serviceAccount.name` 을 명시했다. Pod Identity 연결이 (클러스터, 네임스페이스, SA) **문자열 일치**로만 동작하므로 차트 기본값에 맡기면 어긋났을 때 조용히 실패한다.
+- `auth` 블록은 일부러 비웠다. 적지 않으면 컨트롤러 파드의 기본 자격증명 사슬을 쓰고, Pod Identity 가 거기에 붙는다. `auth.secretRef` 를 쓰면 "시크릿을 읽기 위한 시크릿"이 생겨 문제가 원점으로 돌아간다.
+
+### 11.5 같이 고친 결함 — AppProject 의 와탭 저장소 주소
+
+9항에서 Application 의 `repoURL` 을 고쳤는데 **AppProject 의 `sourceRepos` 는 옛 주소 그대로였다**(EKS·GKE 양쪽). 이대로면 Application 이 `repo ... is not permitted in project` 로 막힌다. 두 곳이 문자열로 정확히 같아야 한다. 양쪽 다 `https://whatap.github.io/helm` 로 맞췄다.
+
+AppProject 에 `external-secrets` 네임스페이스와 `ClusterSecretStore`(클러스터 스코프)도 추가했다.
+
+### 11.6 PSA 라벨 — 그리고 정정
+
+`monitoring` 과 `whatap-monitoring` 에 파드 보안 어드미션 라벨을 붙였다. 둘 다 `enforce: privileged` · `audit: baseline` 이다.
+
+**여기서 이전 판단을 정정한다.** 두 네임스페이스를 나눠 두는 근거로 "PSA 로 특권 허용 범위를 한 칸에 가둔다"를 들었는데, **`monitoring` 도 `privileged` 여야 한다.** `otel-agent` DaemonSet 이 `/var/log/pods` 와 `/var/lib/docker/containers` 를 hostPath 로 마운트하고(`collector-agent.yaml`), baseline 수준은 hostPath 볼륨을 금지하기 때문이다. EKS·GKE 양쪽 동일하다.
+
+즉 **PSA 는 두 네임스페이스를 구별해 주지 못한다.** 분리의 근거로 남는 것은 와탭 지원 구성 준수와 RBAC 사고 범위뿐이고, 둘 다 약하다. 다만 ESO 도입으로 분리의 *비용*(수동 시크릿)이 0이 되었으므로 합칠 이유도 없어졌다 — 현상 유지가 합리적이다.
+
+라벨 자체는 값이 있다. `audit: baseline` 이 "지금 아는 그 DaemonSet 말고 다른 것이 baseline 을 어기면" 감사 로그에 남긴다. 열어 둔 것이 **의도된 예외임을 코드로 남기는 것**이 목적이다.
+
+**아직 안 한 것** — `bank-of-anthos` 네임스페이스에는 PSA 라벨을 붙이지 않았다. 앱 파드 6종이 `restricted` 를 통과하는지 확인되지 않았고, 그 파일은 앱 담당 영역이다. 제안은 `warn: restricted` 로 먼저 한 번 돌려 무엇이 걸리는지 보는 것이다. **PSA 가 실제로 무언가를 막을 수 있는 곳은 거기뿐이다.**
+
+### 11.7 이 변경만으로는 동작하지 않는다
+
+**Terraform 변경이 필요하다.** `Infra/aws-modules/observability/iam.tf` 에 다음이 있어야 ESO 컨트롤러가 Secrets Manager 를 읽는다.
+
+- IAM 역할 + 정책 — `secretsmanager:GetSecretValue`·`DescribeSecret` 를 `secret:/boa/observability*` 로 한정
+- `aws_eks_pod_identity_association` — ns `external-secrets`, sa `external-secrets`
+
+이관이 끝나면 `boa-eks-otel-collector-policy` 의 `ReadObservabilitySecrets` 문을 **빼야 한다.** 수집기 SA 는 더 이상 Secrets Manager 를 읽을 필요가 없고, 그 SA 는 파드 4종이 공유하므로 빼면 순유출량이 줄어든다.
+
+### 검증
+
+`kubectl kustomize` EKS·GKE 12개 오버레이 루트 + 신규 `bootstrap` 전부 렌더 성공. `SecretProviderClass` 와 pause 파드가 관측 오버레이에서 사라졌고, 계측 어노테이션은 `inject-java` 3 · `inject-python` 3 으로 회귀 없음.
+
+**실행으로만 확인되는 것** — ESO 2.11.0 이 EKS Pod Identity 를 실제로 집는지. 확인 방법 — 싱크 후 `kubectl -n external-secrets logs deploy/external-secrets` 에 자격증명 오류가 없는지, 그리고 `kubectl -n whatap-monitoring get externalsecret whatap-credentials` 가 `SecretSynced` 인지 본다. IRSA 만 지원하는 구성이면 SA 에 IRSA 어노테이션을 다는 경로로 바꿔야 한다.
+
+---
+
+## 12. EKS CloudWatch 전송 임시 비활성화 (2026-09-26)
+
+비용과 데이터 보호 정책 복잡도를 다시 검토할 때까지 OTel Gateway 의 CloudWatch
+전송을 중단했다. `awscloudwatchlogs`·`awsemf` exporter와 `logs/audit` 파이프라인을
+제거했고, metrics 파이프라인은 `otlp/whatap`만 사용한다.
+
+- trace: Whatap + S3
+- metric: Whatap
+- log: Whatap + S3
+
+기존 CloudWatch 로그 그룹과 과거 데이터는 삭제하지 않는다. 공통 `redaction`·
+`transform` processor도 유지하므로 Whatap과 S3로 나가는 데이터의 사전 마스킹은
+계속 적용된다.
+
+배포 브랜치 병합 전에 `boa-observability-bootstrap`의 `targetRevision`도 `HEAD`에서
+`dev-0922`로 고정했다. 루트 Application이 추적하는 브랜치와 자식 Application이
+읽는 브랜치가 달라 신규 bootstrap 디렉터리를 찾지 못하는 상황을 막기 위해서다.

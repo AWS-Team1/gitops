@@ -36,8 +36,8 @@ data:
           authType: default
           defaultRegion: ap-northeast-2
 
-          # 수집기가 awsemf 로 쓰는 네임스페이스. 여기에 없으면 쿼리 편집기의
-          # 목록에 뜨지 않는다(직접 입력은 여전히 된다).
+          # CloudWatch 신규 전송은 비활성화했지만 기존 EMF 지표 조회를 위해
+          # 데이터소스와 네임스페이스 등록은 보존한다.
           customMetricsNamespaces: BoA/Observability
 
         editable: false

@@ -16,7 +16,9 @@ spec:
     - https://github.com/AWS-Team1/gitops.git
     - https://charts.jetstack.io
     - https://open-telemetry.github.io/opentelemetry-helm-charts
-    - https://whatap-cloud.github.io/whatap-operator
+    # 2026-09-26 교정 — whatap-cloud.github.io 는 존재하지 않는 주소였다.
+    # Application 의 repoURL 과 문자열로 정확히 같아야 한다.
+    - https://whatap.github.io/helm
 
   # ---------------------------------------------------------
   # 허용 대상 네임스페이스

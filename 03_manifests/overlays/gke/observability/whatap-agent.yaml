@@ -68,6 +68,9 @@ spec:
         # GKE 의 기본 런타임이다. 와탭 콘솔에서는 환경 = GKE 를 함께 고른다. 와탭 콘솔의 에이전트 설치 화면에서
         # 런타임을 고르면 아래 두 값이 자동으로 채워진다.
         runtime: containerd
+        # runtimeSocketPath 는 차트 1.9.x 의 CRD 에만 있다. 1.7.6 CRD 에는 없어서
+        # 적용해도 조용히 잘려 나간다(구조 스키마 pruning). Application 이
+        # 1.9.11 을 고정하고 있으므로 이 값이 살아 있다.
         runtimeSocketPath: /var/run/containerd/containerd.sock
 
       # GPU 노드가 없다.
