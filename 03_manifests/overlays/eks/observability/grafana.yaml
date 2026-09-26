@@ -216,14 +216,14 @@ spec:
 # 클러스터를 다시 세우면 ARN 이 바뀐다. 그때도 스크립트가 채우므로
 # 여기를 직접 수정하지 말 것 — 다음 렌더에서 덮어써진다.
 # ---------------------------------------------------------
-  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-grafana-tg/REPLACE_ME
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-grafana-tg/d8fe493bca3d4b65 # aws-render-runtime.sh로 갱신
 
   networking:
     ingress:
       - from:
           - securityGroup:
               # PLACEHOLDER — terraform output -raw ops_alb_security_group_id (aws-ops)
-              groupID: sg-REPLACE_ME
+              groupID: sg-0e4b3718e6b209525 # aws-render-runtime.sh로 갱신
 
         ports:
           - protocol: TCP
