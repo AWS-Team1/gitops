@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balancereader
+spec:
+  template:
+    spec:
+      containers:
+        - name: balancereader
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-balancereader:sha-c4e38dfb9b9a08a8a2cd06fa445f4cd8d66a7389
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db-secret
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ledger-db-secret
+                  key: password
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:postgresql://db.boa.internal:5432/ledgerdb?sslmode=require"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: "$(POSTGRES_USER)"
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: "$(POSTGRES_PASSWORD)"
+      volumes:
+        - $patch: replace
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: bank-of-anthos-ledger-secrets
