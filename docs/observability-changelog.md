@@ -698,3 +698,56 @@ AppProject 에 `external-secrets` 네임스페이스와 `ClusterSecretStore`(클
 배포 브랜치 병합 전에 `boa-observability-bootstrap`의 `targetRevision`도 `HEAD`에서
 `dev-0922`로 고정했다. 루트 Application이 추적하는 브랜치와 자식 Application이
 읽는 브랜치가 달라 신규 bootstrap 디렉터리를 찾지 못하는 상황을 막기 위해서다.
+
+---
+
+## 13. AppProject 가 WhatapAgent 를 막고 있었다 (2026-09-27)
+
+첫 자동 동기화에서 `boa-observability` 가 리소스 15개를 전부 `Missing` 으로 뱉었다. Grafana·수집기·`monitoring` 네임스페이스까지 하나도 만들어지지 않았다.
+
+원인은 하나였다.
+
+```
+resource monitoring.whatap.com:WhatapAgent is not permitted in project boa
+```
+
+### 13.1 왜 놓쳤나
+
+`WhatapAgent` CRD 가 **`scope: Cluster`** 로 선언되어 있다 (차트 1.9.11 `templates/crd-whatapagents.yaml:15`, 원본을 내려 확인). 그래서 AppProject 의 `namespaceResourceWhitelist: ["*"/"*"]` 로는 덮이지 않고 `clusterResourceWhitelist` 에 명시해야 한다.
+
+7항에서 관측 스택이 요구하는 클러스터 스코프 리소스를 추려 넣을 때 CRD·ClusterRole·웹훅까지는 챙겼는데, **차트가 설치하는 CRD 와 우리가 만드는 CR 을 따로 세지 않았다.** CRD 를 허용했으니 그 CR 도 되리라 넘겨짚은 것이 실수다. 둘은 별개 리소스다.
+
+같은 차트의 `WhatapPodMonitor` · `WhatapServiceMonitor` · `WhatapStaticEndpoint` 는 `scope: Namespaced` 라 `"*"` 로 덮인다. 추가가 필요한 것은 `WhatapAgent` 하나뿐이다.
+
+### 13.2 고장 양상이 오해를 부른다
+
+막힌 것은 CR 하나인데 **Application 전체의 Sync 가 시작되지 못한다.** Argo CD 는 매니페스트 묶음을 통째로 검사하고 하나라도 정책에 걸리면 전부 적용하지 않는다.
+
+그래서 화면에는 "15개 리소스가 각각 실패한 것"처럼 보인다. Sync·Retry 를 눌러도 같은 자리에서 멈춘다. **리소스 개수에 현혹되지 말고 Application 수준 오류 메시지를 먼저 읽어야 한다.**
+
+선행 Application 은 전부 정상이었다 — `boa-external-secrets` · `boa-observability-bootstrap` · `boa-otel-operator` · `boa-whatap-operator` 모두 Healthy/Synced, 와탭 ExternalSecret 도 동기화 완료. 즉 11항의 ESO 경로는 실제로 동작했다.
+
+### 13.3 같이 고친 것 — CR 에 붙어 있던 namespace
+
+`whatap-agent.yaml` 의 CR 에 `metadata.namespace: whatap-monitoring` 이 적혀 있었다. **클러스터 스코프 리소스라 API 서버가 무시한다.** 동작에 영향은 없지만 Argo CD 추적과 읽는 사람 둘 다 헷갈리게 한다. EKS·GKE 양쪽에서 뺐다.
+
+에이전트 파드가 어디 생기는지는 이 필드와 무관하다. 오퍼레이터가 **자기 네임스페이스**에 만든다.
+
+### 13.4 변경
+
+| 파일 | 변경 |
+|---|---|
+| `overlays/eks/applications/project.yaml` | `monitoring.whatap.com/WhatapAgent` 허용 추가 |
+| `overlays/gke/applications/project.yaml` | 동일 |
+| `overlays/eks/observability/whatap-agent.yaml` | CR 의 `metadata.namespace` 제거 |
+| `overlays/gke/observability/whatap-agent.yaml` | 동일 |
+
+### 검증
+
+`kubectl kustomize` EKS 7개 · GKE 6개 오버레이 루트 전부 렌더 성공. 렌더 결과에서 `WhatapAgent` 에 `namespace` 가 없고, 두 AppProject 의 `clusterResourceWhitelist` 에 항목이 들어갔다.
+
+**실행으로만 확인되는 것** — 이 커밋 이후 `boa-observability` 가 실제로 Sync 되는지. 자동 동기화가 켜져 있으므로 푸시 후 저절로 재시도한다.
+
+### 다음 점검 항목
+
+`/boa/observability/grafana` 시크릿에 **값이 아직 없다.** Terraform 이 시크릿 껍데기만 만들고 값은 사람이 넣는 구조다(11항 설계 그대로). 값이 없으면 `grafana-admin` ExternalSecret 이 `SecretSyncedError` 가 되고 Grafana 파드가 기동하지 못한다. 이건 코드 결함이 아니라 **미입력 데이터**다.

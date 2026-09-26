@@ -47,7 +47,9 @@ apiVersion: monitoring.whatap.com/v2alpha1
 kind: WhatapAgent
 metadata:
   name: whatap
-  namespace: whatap-monitoring
+  # namespace 를 적지 않는다 — 이 CR 은 scope: Cluster 다.
+  # 적어도 API 서버가 무시하고, Argo CD 추적만 헷갈려진다.
+  # 에이전트 파드는 오퍼레이터가 "자기 네임스페이스"에 만든다.
   annotations:
     # CRD 는 boa-whatap-operator Application(앱 단위 wave -15)이 설치한다.
     # 이 Application 은 wave -5 이므로 그보다 늦다. 앱 내부 wave 는
