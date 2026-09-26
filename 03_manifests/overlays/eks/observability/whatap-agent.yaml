@@ -15,7 +15,7 @@
 # ---------------------------------------------------------
 # 자격증명 — whatap-credentials Secret 이 먼저 있어야 한다
 # ---------------------------------------------------------
-# 이 Secret 은 overlays/eks/bootstrap/externalsecret-whatap.yaml 이
+# 이 Secret 은 overlays/eks/whatap-bootstrap/externalsecret-whatap.yaml 이
 # 만든다. External Secrets Operator 가 Secrets Manager 의
 # /boa/observability/whatap 에서 값을 꺼내 이 네임스페이스에 쓴다.
 #
@@ -26,7 +26,7 @@
 #
 # 읽는 쪽이 셋이다 — 오퍼레이터 Deployment(secretKeyRef, optional 아님),
 # master-agent, node-agent. 그래서 이 Secret 은 오퍼레이터보다 앞 wave 에
-# 만들어져야 한다(boa-observability-bootstrap, wave -22).
+# 만들어져야 한다(boa-whatap-bootstrap, wave -22).
 #
 # 라이선스 키가 Git 에 들어가지 않는다는 원칙은 그대로다. 저장소에 있는 것은
 # "어느 필드를 어디로 옮겨라"는 지시뿐이고 값은 Secrets Manager 에만 있다.

@@ -91,7 +91,7 @@ spec:
       kind: ValidatingWebhookConfiguration
 
     # ClusterSecretStore 는 클러스터 스코프다. 여기 없으면
-    # bootstrap/clustersecretstore.yaml 이 적용되지 않는다.
+    # whatap-bootstrap/clustersecretstore.yaml 이 적용되지 않는다.
     - group: external-secrets.io
       kind: ClusterSecretStore
 

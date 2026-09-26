@@ -751,3 +751,68 @@ resource monitoring.whatap.com:WhatapAgent is not permitted in project boa
 ### 다음 점검 항목
 
 `/boa/observability/grafana` 시크릿에 **값이 아직 없다.** Terraform 이 시크릿 껍데기만 만들고 값은 사람이 넣는 구조다(11항 설계 그대로). 값이 없으면 `grafana-admin` ExternalSecret 이 `SecretSyncedError` 가 되고 Grafana 파드가 기동하지 못한다. 이건 코드 결함이 아니라 **미입력 데이터**다.
+
+---
+
+## 14. Application 개명 — 이름이 내용과 어긋나 있었다 (2026-09-27)
+
+| 종류 | 이전 | 이후 |
+|---|---|---|
+| Application | `boa-observability` | `boa-monitoring` |
+| Application | `boa-observability-bootstrap` | `boa-whatap-bootstrap` |
+| 디렉터리 | `overlays/eks/bootstrap/` | `overlays/eks/whatap-bootstrap/` |
+
+**13항까지의 기록은 옛 이름 그대로 둔다.** 변경 내역은 그때 무슨 일이 있었는지의 기록이므로 소급해 고치지 않는다.
+
+### 14.1 왜 바꿨나
+
+`boa-observability` 는 **관측 플랫폼 전체가 아니라 그 위에 올라가는 워크로드 묶음**이다. 수집기 3종·Grafana·`WhatapAgent`·`Instrumentation` 등 16개를 배포한다. cert-manager·오퍼레이터·ESO 는 별도 Application 이다.
+
+그런데 관측 Application 을 묶을 AppProject 이름으로 `boa-observability` 를 쓰기로 하면서 **같은 이름이 두 층위에 걸치게 됐다.** 프로젝트가 우산 이름을 가져가고 Application 은 자기가 하는 일에 맞는 이름을 갖는 편이 맞다.
+
+`boa-observability-bootstrap` 도 마찬가지로 새 프로젝트 이름과 접두사가 겹쳤다. 담고 있는 셋 중 둘이 와탭 전용(`whatap-monitoring` 네임스페이스, `whatap-credentials`)이라 `boa-whatap-bootstrap` 이 더 정확하다.
+
+### 14.2 검토했다가 접은 것
+
+**`monitoring` 네임스페이스를 `otel-monitoring` 으로** — 접었다. 그 안에 Grafana 가 있는데 Grafana 는 OpenTelemetry 데이터를 보지 않는다. 데이터소스가 CloudWatch 하나뿐이다. 게이트웨이 파드에는 와탭 사이드카도 들어 있다. **섞여 있는 현실에는 포괄적인 이름이 오히려 정확하다.**
+
+비용도 작지 않았다 — 매니페스트 참조 31곳, 서비스 DNS 주소 5곳, 그리고 **Pod Identity 연결 2개 재생성**(`terraform apply`). Pod Identity 는 (클러스터, 네임스페이스, ServiceAccount) 문자열 일치로만 동작해서, 어긋나면 조용히 자격증명이 안 붙는다.
+
+**Application 이름을 `monitoring` 단독으로** — 접었다. 네임스페이스 이름과 완전히 같아져 오류 메시지에서 구분이 안 된다. 그리고 이 Application 은 `monitoring` 에만 배포하지 않는다 — `Instrumentation` 은 `bank-of-anthos` 로, `WhatapAgent` 는 클러스터 스코프다.
+
+**`boa-ClusterObserver`** — 불가. `metadata.name` 은 RFC 1123 DNS 서브도메인이어야 하며 대문자를 받지 않는다.
+
+### 14.3 ClusterSecretStore 에 주의 주석을 달았다
+
+디렉터리가 `whatap-bootstrap/` 이 되면서 그 안의 `boa-aws` 금고 설정이 와탭 전용처럼 보이게 됐다. 실제로는 셋이 참조한다.
+
+| ExternalSecret | 네임스페이스 | 와탭 관련 |
+|---|---|---|
+| `whatap-credentials` | `whatap-monitoring` | O |
+| `whatap-observability` | `monitoring` | O |
+| **`grafana-admin`** | `monitoring` | **X** |
+
+파일 머리말에 명시했다 — **이 파일을 지우면 Grafana 도 같이 죽는다.**
+
+### 14.4 지금이 가장 싼 시점이었다
+
+두 Application 다 클러스터에서 **소유한 리소스가 0** 이다. 13항의 `WhatapAgent` 차단으로 `boa-observability` 는 한 번도 동기화에 성공한 적이 없고, `boa-observability-bootstrap` 은 Healthy 였지만 개명 대상 리소스를 재생성해도 부담이 없다.
+
+Application 에 `resources-finalizer.argocd.argoproj.io` 가 걸려 있지 않은 것도 확인했다. 옛 이름의 Application 이 정리돼도 리소스가 따라 지워지지 않는다.
+
+초록이 한 번 뜬 뒤였다면 16개 리소스가 옛 Application 소유로 남아 정리가 번거로웠을 것이다.
+
+### 검증
+
+`kubectl kustomize` EKS 7개 · GKE 6개 오버레이 루트 전부 렌더 성공. Application 은 EKS 10개 · GKE 8개로 개수 변화 없고, `boa-monitoring` 이 16개, `boa-whatap-bootstrap` 이 3개를 렌더한다. 옛 이름 문자열은 매니페스트에 한 곳도 남지 않았다.
+
+### 미결 — 다음 단계
+
+**AppProject 분리.** `boa` 가 관측 스택 때문에 클러스터 스코프 8종을 허용하고 있는데, 앱 오버레이가 실제로 만드는 클러스터 스코프는 `shared` 의 `Namespace` 하나뿐이다. 관측용 `boa-observability` AppProject 를 따로 만들면 `boa` 를 1종으로 되돌릴 수 있다.
+
+이번 커밋에 같이 넣지 않았다. **개명과 프로젝트 분리를 한 번에 하면 다음에 막혔을 때 원인 가르기가 어렵다.** 13항이 정확히 그런 사고였다.
+
+분리 시 주의할 것 두 가지를 미리 확인해 뒀다.
+
+- **`kube-system` destination 이 필요하다.** cert-manager 차트가 `global.leaderElection.namespace` 기본값 `kube-system` 으로 `Role`·`RoleBinding` 4개를 렌더한다(v1.19.1 `templates/rbac.yaml:3,27`·`cainjector-rbac.yaml:55,84`). **지금 `boa` 에도 이 destination 이 없다** — 잠재 결함이다.
+- **`bank-of-anthos` destination 이 필요하다.** `Instrumentation/boa` 가 거기 있다. 이것 때문에 관측 프로젝트가 앱 네임스페이스를 허용해야 하는데, `namespaceResourceWhitelist` 는 destination 별로 나눌 수 없어 앱 네임스페이스에 아무 리소스나 만들 수 있게 된다. CR 을 `monitoring` 으로 옮기면 없앨 수 있다(앱 매니페스트 6개 수정 + 앱 파드 롤링 재시작 필요).

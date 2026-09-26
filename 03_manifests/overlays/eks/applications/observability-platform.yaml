@@ -103,7 +103,7 @@ spec:
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: boa-observability-bootstrap
+  name: boa-whatap-bootstrap
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "-22"
@@ -115,7 +115,7 @@ spec:
     # boa-eks-root 와 같은 배포 브랜치를 고정한다. HEAD(기본 브랜치)를 쓰면
     # dev-0922 에만 있는 bootstrap 매니페스트를 찾지 못할 수 있다.
     targetRevision: dev-0922
-    path: 03_manifests/overlays/eks/bootstrap
+    path: 03_manifests/overlays/eks/whatap-bootstrap
 
   destination:
     server: https://kubernetes.default.svc
