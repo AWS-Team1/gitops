@@ -115,6 +115,7 @@ GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics 
 1. GKE에 연결하고 JWT 키를 준비합니다.
 
    ```bash
+   gcloud auth login --no-launch-browser
    bash 02_scripts/gcp-connect-cluster.sh
    bash 02_scripts/gcp-prepare-jwt.sh
    ```
