@@ -1,9 +1,12 @@
 # =========================================================
-# 관측 플랫폼 — Helm 차트 3개 (GKE — EKS 판과 동일)
+# 관측 플랫폼 — Helm 차트 3개 + GKE 전용 bootstrap 1개
 #
 # 순서가 강제된다. sync-wave 로 표현했다.
 #   -25  cert-manager        : 오퍼레이터의 변경 웹훅 인증서를 발급한다
 #   -20  otel-operator       : OpenTelemetryCollector · Instrumentation CRD 를 만든다
+#   -22  whatap-bootstrap    : whatap-monitoring 네임스페이스 · whatap-credentials
+#                              SecretSync (GKE 전용 — EKS의 ClusterSecretStore에
+#                              해당하는 게 GKE엔 없어서, 대신 여기서 만든다)
 #   -15  whatap-operator     : 와탭 쿠버네티스 에이전트(클러스터 지표)
 #
 # 이 wave 가 앱 Application(-10)보다 앞이라는 것이 핵심이다. 앱보다 늦으면
@@ -160,6 +163,52 @@ spec:
         factor: 2
         maxDuration: 3m
 ---
+# whatap-monitoring 네임스페이스와 whatap-credentials 자동 생성.
+#
+# EKS는 ESO(ClusterSecretStore)가 이 역할을 하지만, GKE는 ESO가 필요 없다
+# (GKE 네이티브 SecretSync를 이미 쓰고 있어서). 다만 monitoring 네임스페이스용
+# SecretSync(observability/secrets.yaml)는 네임스페이스를 못 넘고, GCP Workload
+# Identity 바인딩도 (네임스페이스, KSA) 조합이라 재사용이 안 된다 — 그래서
+# whatap-monitoring 전용 SecretSync를 따로 둔다(overlays/gke/bootstrap/).
+#
+# whatap-operator(wave -15)의 Deployment가 이 시크릿을 secretKeyRef로 직접
+# 읽고 optional이 아니므로, 그보다 먼저 와야 한다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: boa-whatap-bootstrap
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-22"
+spec:
+  project: boa-observability
+
+  source:
+    repoURL: https://github.com/AWS-Team1/gitops.git
+    targetRevision: HEAD
+    path: 03_manifests/overlays/gke/bootstrap
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: whatap-monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+
+    syncOptions:
+      - ServerSideApply=true
+      - PruneLast=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+---
 # 와탭 쿠버네티스 에이전트.
 #
 # 왜 필요한가 — 와탭 애플리케이션 제품(APM)은 트레이스·지표·로그를 받지만
@@ -195,7 +244,8 @@ spec:
         # 시크릿 이름은 차트에 고정되어 있다 — whatap-credentials.
         # values 로 바꿀 수 없다(templates/secret-whatap-credentials.yaml:6).
         # 키 이름도 고정이다 — WHATAP_LICENSE · WHATAP_HOST · WHATAP_PORT.
-        # 만드는 명령은 overlays/*/observability/whatap-agent.yaml 머리말에 있다.
+        # 만드는 주체는 위 boa-whatap-bootstrap Application(SecretSync)이다
+        # — overlays/gke/bootstrap/secrets.yaml 참조.
         credentials:
           create: false
 

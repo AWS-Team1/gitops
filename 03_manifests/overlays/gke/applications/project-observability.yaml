@@ -4,12 +4,15 @@
 # EKS 판(overlays/eks/applications/project-observability.yaml)과 같은 이유로
 # 나눈다. 자세한 배경은 그쪽 주석 참조.
 #
-# EKS 와 다른 점 둘
+# EKS 와 다른 점 하나
 #   1. External Secrets Operator 가 없다. GKE 는 SecretSync 컨트롤러를 쓰고
 #      그건 GKE 부가기능이라 우리가 Application 으로 설치하지 않는다.
 #      → external-secrets 네임스페이스와 ClusterSecretStore 가 빠진다.
-#   2. boa-whatap-bootstrap 이 없다. whatap-credentials 를 GKE 에서는 아직
-#      사람이 만든다(미결 — GCP Secret Manager 에 값 자체가 없다).
+#
+# boa-whatap-bootstrap(2026-09-27 추가)은 EKS 판과 이름은 같지만 내용물이
+# 다르다 — ClusterSecretStore 대신 whatap-monitoring 전용 SecretProviderClass
+# ·SecretSync를 만든다(overlays/gke/bootstrap/). destinations의
+# whatap-monitoring이 이미 여기 있어서 따로 추가할 게 없었다.
 # =========================================================
 apiVersion: argoproj.io/v1alpha1
 kind: AppProject
