@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: userservice
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-1343dad73d81dac8a5764f95a377086526efc043
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-userservice:sha-8c627b15d0b6481879a560a7bfddf265d148420c
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -21,6 +21,27 @@ spec:
                   key: password
             - name: ACCOUNTS_DB_URI
               value: "postgresql+psycopg2://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db.boa.internal:5432/accountsdb?sslmode=require"
+            - name: VALKEY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: host
+            - name: VALKEY_PORT
+              value: "6379"
+            - name: VALKEY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: username
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: password
+            - name: VALKEY_TLS
+              value: "true"
+            - name: VALKEY_CLUSTER_MODE
+              value: "true"
       volumes:
         - $patch: replace
         - name: secrets-store
