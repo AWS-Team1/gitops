@@ -24,7 +24,7 @@ spec:
   mode: deployment
 
   # 늘리면 지표가 중복된다. 이 값을 바꾸지 않는다.
-  replicas: 0
+  replicas: 1
 
   serviceAccount: otel-collector
 

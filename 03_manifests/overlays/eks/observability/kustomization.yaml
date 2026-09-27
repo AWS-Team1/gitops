@@ -10,6 +10,7 @@ resources:
   - rbac.yaml
   - secrets.yaml
   - collector-gateway.yaml
+  - collector-agent.yaml
   - collector-cluster.yaml
   - whatap-agent.yaml
   - grafana.yaml
