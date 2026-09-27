@@ -16,7 +16,7 @@ patches:
         path: /spec/egress/0/to
         value:
           - ipBlock:
-              cidr: 10.50.1.5/32
+              cidr: 10.50.1.11/32
   - target:
       group: networking.k8s.io
       version: v1
