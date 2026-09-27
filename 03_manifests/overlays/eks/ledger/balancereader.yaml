@@ -7,8 +7,7 @@ spec:
     spec:
       containers:
         - name: balancereader
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-balancereader:sha-c2853726f19ad8da481ee88c7ff11d0b47e7aa3c
-          env:
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-balancereader:sha-c4e38dfb9b9a08a8a2cd06fa445f4cd8d66a7389
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
