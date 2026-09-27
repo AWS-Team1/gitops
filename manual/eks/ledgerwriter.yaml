@@ -57,6 +57,25 @@ spec:
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "$(POSTGRES_PASSWORD)"
+            - name: VALKEY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: host
+            - name: VALKEY_PORT
+              value: "6379"
+            - name: VALKEY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: username
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: password
+            - name: VALKEY_TLS
+              value: "true"
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "3"
           volumeMounts:
@@ -131,4 +150,14 @@ spec:
         - port: 53
           protocol: UDP
         - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 192.168.24.0/24
+        - ipBlock:
+            cidr: 192.168.25.0/24
+      ports:
+        - port: 6379
+          protocol: TCP
+        - port: 6380
           protocol: TCP
