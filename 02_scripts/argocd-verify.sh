@@ -45,10 +45,10 @@ if [[ "$PLATFORM" == aws ]]; then
     kubectl -n "$NAMESPACE" rollout status "deployment/$deployment" --timeout=10m
   done
 else
-  # GCP DR 서비스 6개가 replicas=0이고 HPA가 없는지 확인한다.
+  # GCP 서비스 6개가 replicas=1이고 HPA가 없는지 확인한다.
   for deployment in "${DEPLOYMENTS[@]}"; do
-    [[ $(kubectl -n "$NAMESPACE" get deployment "$deployment" -o jsonpath='{.spec.replicas}') == 0 ]] || {
-      echo "ERROR: $deployment replicas가 0이 아닙니다." >&2
+    [[ $(kubectl -n "$NAMESPACE" get deployment "$deployment" -o jsonpath='{.spec.replicas}') == 1 ]] || {
+      echo "ERROR: $deployment replicas가 1이 아닙니다." >&2
       exit 1
     }
   done
