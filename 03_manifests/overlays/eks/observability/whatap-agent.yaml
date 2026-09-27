@@ -48,12 +48,12 @@ spec:
     k8sAgent:
       # 클러스터 단위 구성 정보를 모아 보낸다. 노드당이 아니라 클러스터당 하나다.
       masterAgent:
-        enabled: true
+        enabled: false
 
       # 노드마다 뜨는 DaemonSet. 컨테이너 런타임 소켓을 읽어 파드·컨테이너
       # 지표를 만든다. 소켓 경로가 틀리면 파드는 Running 인데 지표가 비어 있다.
       nodeAgent:
-        enabled: true
+        enabled: false
 
         # EKS AL2023 의 기본 런타임이다. 와탭 콘솔의 에이전트 설치 화면에서
         # 런타임을 고르면 아래 두 값이 자동으로 채워진다.

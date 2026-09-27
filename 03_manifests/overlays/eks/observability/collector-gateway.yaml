@@ -19,7 +19,7 @@ metadata:
     argocd.argoproj.io/sync-wave: "10"
 spec:
   mode: deployment
-  replicas: 2
+  replicas: 0
 
   # Pod Identity 가 이 SA 에 붙는다. Infra/aws-observability 의
   # collector_service_account 와 이름이 같아야 한다.
