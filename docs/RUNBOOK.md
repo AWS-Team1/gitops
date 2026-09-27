@@ -101,6 +101,12 @@
     unset ARGOCD_REPO_USERNAME ARGOCD_REPO_PASSWORD
     ```
 
+11. ArgoCD 비밀번호 조회
+   ```bash
+   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+   ```
+
+   
 ## GCP 실행 순서
 
 GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics Server가 없으므로
