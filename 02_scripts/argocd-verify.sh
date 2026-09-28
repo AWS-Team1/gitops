@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 목적: 지정한 플랫폼의 Argo CD Application 동기화 결과를 검증한다.
 # 입력: 첫 번째 인자 aws 또는 gcp.
-# 결과: Root 1개와 Child 4개가 Synced/Healthy이며 플랫폼 배포 상태가 확인된다.
+# 결과: 플랫폼의 모든 Application이 Synced/Healthy이며 workload 상태가 확인된다.
 set -Eeuo pipefail
 
 PLATFORM=${1:-}
@@ -9,8 +9,8 @@ NAMESPACE=bank-of-anthos
 DEPLOYMENTS=(userservice contacts balancereader ledgerwriter transactionhistory frontend)
 
 case "$PLATFORM" in
-  aws) ROOT=boa-eks-root; CONTEXT=boa-eks ;;
-  gcp) ROOT=boa-gke-root; CONTEXT=boa-gke ;;
+  aws) ROOT=boa-eks-root; CONTEXT=boa-eks; EXPECTED_APPLICATION_COUNT=11 ;;
+  gcp) ROOT=boa-gke-root; CONTEXT=boa-gke; EXPECTED_APPLICATION_COUNT=10 ;;
   *) echo "Usage: $0 <aws|gcp>" >&2; exit 2 ;;
 esac
 
@@ -31,10 +31,10 @@ kubectl -n argocd wait applications --all \
 kubectl -n argocd wait applications --all \
   --for=jsonpath='{.status.health.status}'=Healthy --timeout=15m
 
-# Root 1개와 Child 4개가 생성됐는지 확인한다.
+# Root와 플랫폼별 Child Application이 모두 생성됐는지 확인한다.
 APPLICATION_COUNT=$(kubectl -n argocd get applications --no-headers | wc -l)
-[[ "$APPLICATION_COUNT" -eq 5 ]] || {
-  echo "ERROR: Application 수가 5개가 아닙니다: $APPLICATION_COUNT" >&2
+[[ "$APPLICATION_COUNT" -eq "$EXPECTED_APPLICATION_COUNT" ]] || {
+  echo "ERROR: Application 수가 $EXPECTED_APPLICATION_COUNT개가 아닙니다: $APPLICATION_COUNT" >&2
   exit 1
 }
 kubectl -n argocd get applications
