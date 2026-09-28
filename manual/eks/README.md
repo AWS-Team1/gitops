@@ -16,5 +16,5 @@ EKS 초기 설정과 AWS 전용 리소스에 사용하는 manifest입니다. 전
 bash 02_scripts/aws-render-runtime.sh --infra-root /home/karfa/work-dir/Infra
 ```
 
-렌더링 후 변경된 manifest를 검토하고 `dev-0922`에 commit/push해야 Argo CD가 같은
+렌더링 후 변경된 manifest를 검토하고 `dev`에 commit/push해야 Argo CD가 같은
 값을 읽습니다.
