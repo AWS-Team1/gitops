@@ -16,6 +16,120 @@ configs:
       end
       return hs
 
+notifications:
+  context:
+    environmentName: EKS
+  notifiers:
+    service.webhook.slack-deploy: |
+      url: $slack-webhook-url
+      headers:
+        - name: Content-Type
+          value: application/json
+  templates:
+    template.frontend-deployed: |
+      webhook:
+        slack-deploy:
+          method: POST
+          body: |
+            {
+              "text": "Frontend deployment completed",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚀 Frontend 배포 완료",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*{{.context.environmentName}}* 환경이 `Synced + Healthy` 상태입니다."
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Application*\n`{{.app.metadata.name}}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Namespace*\n`{{.app.spec.destination.namespace}}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Sync*\n`{{.app.status.sync.status}}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Health*\n`{{.app.status.health.status}}`"
+                    }
+                  ]
+                },
+                {
+                  "type": "context",
+                  "elements": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "Revision: `{{.app.status.operationState.syncResult.revision}}`"
+                    }
+                  ]
+                }
+              ]
+            }
+    template.frontend-sync-failed: |
+      webhook:
+        slack-deploy:
+          method: POST
+          body: |
+            {
+              "text": "Frontend deployment failed",
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "❌ Frontend 배포 실패",
+                    "emoji": true
+                  }
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "<@U0BF5AZ153M> *{{.context.environmentName}} 환경의 Argo CD 동기화를 확인해 주세요.*"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Application*\n`{{.app.metadata.name}}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*상태*\n`{{.app.status.operationState.phase}}`"
+                    }
+                  ]
+                }
+              ]
+            }
+  triggers:
+    trigger.on-frontend-deployed: |
+      - description: Frontend is synced and healthy.
+        oncePer: app.status.operationState.syncResult.revision
+        send: [frontend-deployed]
+        when: app.status.operationState.phase in ['Succeeded'] and app.status.health.status == 'Healthy'
+    trigger.on-frontend-sync-failed: |
+      - description: Frontend sync failed.
+        send: [frontend-sync-failed]
+        when: app.status.operationState.phase in ['Error', 'Failed']
+
 server:
   service:
     type: ClusterIP

@@ -5,6 +5,8 @@ metadata:
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "0"
+    notifications.argoproj.io/subscribe.on-frontend-deployed.slack-deploy: ""
+    notifications.argoproj.io/subscribe.on-frontend-sync-failed.slack-deploy: ""
 spec:
   project: boa
   # HARD-CODED: 재사용할 GitHub 조직/저장소/브랜치에 맞게 변경한다.
