@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: transactionhistory
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-transactionhistory:sha-73e1393a12cf60918ef918149d863d655c63a3c5
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-transactionhistory:sha-64a8e9893dc8b3194f2eb5ba0fef3069080e21f2
           env:
             - name: POSTGRES_USER
               valueFrom:

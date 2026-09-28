@@ -23,7 +23,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: ledgerwriter
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-ledgerwriter:sha-73e1393a12cf60918ef918149d863d655c63a3c5
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-ledgerwriter:sha-64a8e9893dc8b3194f2eb5ba0fef3069080e21f2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
