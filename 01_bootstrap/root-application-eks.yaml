@@ -18,7 +18,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
-    targetRevision: dev-0922
+    targetRevision: dev
     path: 03_manifests/overlays/eks/applications
   destination:
     server: https://kubernetes.default.svc
