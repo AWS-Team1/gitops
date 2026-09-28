@@ -23,7 +23,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: frontend
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-frontend:sha-07d0297fb279249a1a0e98b944f2eb7f982ae8de
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-frontend:sha-314da4bfefac61c537484ef1f2ee24238315637b
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
