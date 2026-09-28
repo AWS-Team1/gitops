@@ -10,7 +10,7 @@ spec:
   # HARD-CODED: 재사용할 GitHub 조직/저장소/브랜치에 맞게 변경한다.
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
-    targetRevision: dev
+    targetRevision: dev-0922
     path: 03_manifests/overlays/gke/frontend
   destination:
     server: https://kubernetes.default.svc
