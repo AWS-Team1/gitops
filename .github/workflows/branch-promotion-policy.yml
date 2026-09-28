@@ -1,0 +1,78 @@
+name: Branch Promotion Policy
+
+# Allowed promotion path: feature/* -> dev -> release -> main.
+# Require the "Branch Promotion Policy" check on dev, release and main.
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+    branches:
+      - dev
+      - release
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: branch-promotion-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  promotion:
+    name: Branch Promotion Policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check source and target branches
+        shell: bash
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          allowed="feature/* -> dev, dev -> release, release -> main"
+          reason=""
+
+          if [[ "${HEAD_REPO}" != "${BASE_REPO}" ]]; then
+            reason="pull requests must come from a branch in ${BASE_REPO}, not ${HEAD_REPO}"
+          else
+            case "${BASE_REF}" in
+              dev)
+                [[ "${HEAD_REF}" == feature/* ]] || reason="only feature/* may target dev"
+                ;;
+              release)
+                [[ "${HEAD_REF}" == "dev" ]] || reason="only dev may target release"
+                ;;
+              main)
+                [[ "${HEAD_REF}" == "release" ]] || reason="only release may target main"
+                ;;
+              *)
+                reason="${BASE_REF} is not a governed promotion target"
+                ;;
+            esac
+          fi
+
+          {
+            echo "## Branch Promotion Policy"
+            echo
+            echo "| Source | Target | Result |"
+            echo "|---|---|---|"
+            echo "| \`${HEAD_REF}\` | \`${BASE_REF}\` | ${reason:-allowed} |"
+            echo
+            echo "Allowed: ${allowed}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ -n "${reason}" ]]; then
+            echo "::error::Branch promotion blocked: ${reason}. Allowed: ${allowed}"
+            exit 1
+          fi
+
+          echo "Branch promotion ${HEAD_REF} -> ${BASE_REF} is allowed."

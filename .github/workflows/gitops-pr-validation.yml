@@ -1,0 +1,143 @@
+name: GitOps PR Validation
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - release
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitops-pr-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  KUSTOMIZE_VERSION: "5.8.1"
+  KUSTOMIZE_SHA256: "029a7f0f4e1932c52a0476cf02a0fd855c0bb85694b82c338fc648dcb53a819d"
+  PYYAML_VERSION: "6.0.2"
+
+jobs:
+  yaml:
+    name: YAML Syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        shell: bash
+        run: python -m pip install --disable-pip-version-check "pyyaml==${PYYAML_VERSION}"
+
+      - name: Parse YAML files
+        shell: bash
+        run: python 02_scripts/ci/validate-yaml.py
+
+
+  render:
+    name: Kustomize Build (${{ matrix.target.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - name: eks
+            path: 03_manifests/overlays/eks
+          - name: gke
+            path: 03_manifests/overlays/gke
+          - name: manual-eks
+            path: manual/eks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        shell: bash
+        run: python -m pip install --disable-pip-version-check "pyyaml==${PYYAML_VERSION}"
+
+      - name: Install kustomize
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          archive="kustomize_v${KUSTOMIZE_VERSION}_linux_amd64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${archive}" \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv${KUSTOMIZE_VERSION}/${archive}"
+          echo "${KUSTOMIZE_SHA256}  ${RUNNER_TEMP}/${archive}" | sha256sum -c -
+
+          mkdir -p "${RUNNER_TEMP}/bin"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/bin" kustomize
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
+      - name: Render manifests
+        shell: bash
+        env:
+          TARGET_PATH: ${{ matrix.target.path }}
+        run: |
+          set -euo pipefail
+          kustomize version
+          bash 02_scripts/ci/kustomize-build-all.sh "${TARGET_PATH}" "${RUNNER_TEMP}/rendered"
+
+      - name: Check image tag policy
+        shell: bash
+        run: python 02_scripts/ci/check-image-tags.py "${RUNNER_TEMP}/rendered"
+
+
+  summary:
+    name: GitOps CI Required
+    runs-on: ubuntu-latest
+
+    if: ${{ always() }}
+
+    needs:
+      - yaml
+      - render
+
+    steps:
+      - name: Summarize validation results
+        shell: bash
+        env:
+          YAML_RESULT: ${{ needs.yaml.result }}
+          RENDER_RESULT: ${{ needs.render.result }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## GitOps PR Validation"
+            echo
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| YAML Syntax | ${YAML_RESULT} |"
+            echo "| Kustomize Build + Image Tag Policy | ${RENDER_RESULT} |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${YAML_RESULT}" != "success" ]]; then
+            echo "YAML syntax check did not succeed (${YAML_RESULT})."
+            exit 1
+          fi
+
+          if [[ "${RENDER_RESULT}" != "success" ]]; then
+            echo "Kustomize build or image tag policy did not succeed (${RENDER_RESULT})."
+            exit 1
+          fi
+
+          echo "All GitOps PR validation checks passed."
