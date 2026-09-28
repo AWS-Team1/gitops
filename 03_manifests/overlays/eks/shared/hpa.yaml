@@ -3,7 +3,7 @@
 # 역할: 각 서비스의 CPU 사용률이 높아지면 Pod 개수를 자동으로 늘리고,
 #       낮아지면 다시 줄여주는 "자동 조절 장치". 서비스마다 하나씩, 총 6개 블록.
 #       "---" 로 여러 개의 리소스를 한 파일에 나열한 것.
-# (metrics-server 설치됨 — TARGETS 에 실제 %가 나와야 정상. minReplicas 2는 가용성 확보용(노드 1대 죽어도 서비스 유지),
+# (metrics-server 설치됨 — TARGETS 에 실제 %가 나와야 정상. minReplicas 1로 기본 운영 비용을 줄이고,
 #  maxReplicas는 노드 2대 + preferred anti-affinity 기준 목표치. Karpenter 붙이면 이 이상도 스케줄 가능)
 # ============================================================
 apiVersion: autoscaling/v2
@@ -15,7 +15,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: frontend
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 3
   metrics:
     - type: Resource
@@ -35,7 +35,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: userservice
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 3
   metrics:
     - type: Resource
@@ -55,7 +55,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: contacts
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 3
   metrics:
     - type: Resource
@@ -75,7 +75,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: ledgerwriter
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 3
   metrics:
     - type: Resource
@@ -95,7 +95,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: balancereader
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 3
   metrics:
     - type: Resource
@@ -115,7 +115,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: transactionhistory
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 3
   metrics:
     - type: Resource
