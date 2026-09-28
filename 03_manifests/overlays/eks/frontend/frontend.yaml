@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-frontend:sha-b17cd11235cb8882692a580d4ccac7f6afe36eb6
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-frontend:sha-574c2010655a2a085a09ddc70bcf33f85326a28a
           env:
             - name: ENV_PLATFORM
               value: "aws"
