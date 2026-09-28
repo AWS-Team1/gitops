@@ -87,13 +87,21 @@
 
    ```bash
    read -rp "GitHub username: " ARGOCD_REPO_USERNAME
+   ```
 
+   ```bash
    read -srp "GitHub PAT: " ARGOCD_REPO_PASSWORD
+   ```
 
+   ```bash
    printf '\n'
+   ```
 
+   ```bash
    export ARGOCD_REPO_USERNAME ARGOCD_REPO_PASSWORD
+   ```
 
+   ```bash
    bash 02_scripts/argocd-register-repository.sh aws
    ```
 
@@ -101,17 +109,21 @@
 
     ```bash
     bash 02_scripts/argocd-apply-root.sh aws
+    ```
 
+    ```bash
     bash 02_scripts/argocd-verify.sh aws
+    ```
 
+    ```bash
     unset ARGOCD_REPO_USERNAME ARGOCD_REPO_PASSWORD
     ```
 
 11. ArgoCD 비밀번호 조회
 
-   ```bash
-   kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
-   ```
+    ```bash
+    kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+    ```
 
 ## GCP 실행 순서
 
@@ -122,9 +134,13 @@ GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics 
 
    ```bash
    gcloud auth login --no-launch-browser
+   ```
 
+   ```bash
    bash 02_scripts/gcp-connect-cluster.sh
+   ```
 
+   ```bash
    bash 02_scripts/gcp-prepare-jwt.sh
    ```
 
@@ -132,17 +148,9 @@ GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics 
 
    ```bash
    bash 02_scripts/argocd-install.sh gcp
+   ```
 
-   read -srp "Slack Webhook URL: " SLACK_WEBHOOK_URL
-
-   printf '\n'
-
-   kubectl -n argocd create secret generic argocd-notifications-secret \
-     --from-literal=slack-webhook-url="$SLACK_WEBHOOK_URL" \
-     --dry-run=client -o yaml | kubectl apply -f -
-
-   unset SLACK_WEBHOOK_URL
-
+   ```bash
    bash 02_scripts/gcp-install-argocd-exposure.sh
    ```
 
@@ -150,13 +158,21 @@ GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics 
 
    ```bash
    read -rp "GitHub username: " ARGOCD_REPO_USERNAME
+   ```
 
+   ```bash
    read -srp "GitHub PAT: " ARGOCD_REPO_PASSWORD
+   ```
 
+   ```bash
    printf '\n'
+   ```
 
+   ```bash
    export ARGOCD_REPO_USERNAME ARGOCD_REPO_PASSWORD
+   ```
 
+   ```bash
    bash 02_scripts/argocd-register-repository.sh gcp
    ```
 
@@ -164,20 +180,27 @@ GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics 
 
    ```bash
    bash 02_scripts/argocd-apply-root.sh gcp
+   ```
 
+   ```bash
    bash 02_scripts/argocd-verify.sh gcp
+   ```
 
+   ```bash
    unset ARGOCD_REPO_USERNAME ARGOCD_REPO_PASSWORD
    ```
 
 ## 클러스터 삭제 전 LB 정리
 
 이 명령은 Terraform destroy를 실행하지 않습니다. 각 클라우드 컨트롤러가 만든 외부 LB
-리소스만 정리합니다.
+리소스만 정리합니다. GCP 스크립트는 앱 Ingress와 Argo CD Ingress를 함께 제거하며,
+완료된 뒤 GKE를 Terraform으로 삭제합니다.
 
 ```bash
 bash 02_scripts/aws-teardown.sh --confirm
+```
 
+```bash
 bash 02_scripts/gcp-teardown.sh --confirm
 ```
 

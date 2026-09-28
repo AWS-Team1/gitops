@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 목적: GKE 삭제 전에 Kubernetes 컨트롤러가 만든 외부 LB 리소스만 정리한다.
 # 입력: --confirm, 현재 kubectl context가 boa-gke여야 한다.
-# 결과: 앱 Service와 Argo CD Ingress 관련 외부 LB 리소스가 제거된다.
+# 결과: 앱과 Argo CD Ingress 관련 외부 LB 리소스가 제거된다.
 # GKE 삭제 전에 Kubernetes 컨트롤러가 만든 외부 LB만 정리한다.
 set -Eeuo pipefail
 
@@ -26,6 +26,7 @@ if [[ -n "$CONTROLLER" ]]; then
 fi
 
 # 삭제 완료까지 기다리면 GKE 컨트롤러의 forwarding rule/backend 정리도 끝난다.
+kubectl -n "$APP_NAMESPACE" delete ingress boa-ingress --ignore-not-found --wait --timeout="$TIMEOUT"
 kubectl -n "$APP_NAMESPACE" delete service frontend --ignore-not-found --wait --timeout="$TIMEOUT"
 kubectl -n "$ARGOCD_NAMESPACE" delete ingress argocd-gcp --ignore-not-found --wait --timeout="$TIMEOUT"
 kubectl -n "$ARGOCD_NAMESPACE" delete managedcertificate argocd-gcp --ignore-not-found --wait --timeout="$TIMEOUT"

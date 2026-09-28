@@ -143,17 +143,21 @@ unset ARGOCD_REPO_USERNAME ARGOCD_REPO_PASSWORD
 
 ## 다음 GKE 삭제 시 사용할 순서
 
-Argo CD가 Ingress를 다시 만들지 못하도록 controller를 먼저 멈춘다.
+스크립트가 Argo CD controller를 먼저 멈추고 앱과 Argo CD Ingress를 제거한다.
 
 ```bash
 cd /home/karfa/work-dir/gitops
+```
+
+```bash
 bash 02_scripts/gcp-connect-cluster.sh
+```
 
-kubectl -n argocd scale statefulset argocd-application-controller --replicas=0
-kubectl -n bank-of-anthos delete ingress boa-ingress \
-  --ignore-not-found --wait --timeout=15m
-
+```bash
 bash 02_scripts/gcp-teardown.sh --confirm
+```
+
+```bash
 kubectl get ingress -A
 ```
 
@@ -161,7 +165,13 @@ Ingress가 모두 사라진 뒤 GKE만 제거한다.
 
 ```bash
 cd /home/karfa/work-dir
+```
+
+```bash
 terraform -chdir=Infra/gcp-gke plan -destroy
+```
+
+```bash
 terraform -chdir=Infra/gcp-gke destroy
 ```
 
