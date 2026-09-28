@@ -23,7 +23,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: contacts
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-contacts:sha-60f7ae64b61856facec022e50ad533e6aeac08e9
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-contacts:sha-5a6c6f1617734175db508672028e880b044571d6
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
