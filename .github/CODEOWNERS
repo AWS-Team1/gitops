@@ -1,0 +1,8 @@
+# GitOps reviewers own the whole repository.
+# More specific paths are listed so ownership stays explicit if the default changes.
+*                @AWS-Team1/gitops-reviewers
+
+/.github/        @AWS-Team1/gitops-reviewers
+/01_bootstrap/   @AWS-Team1/gitops-reviewers
+/02_scripts/     @AWS-Team1/gitops-reviewers
+/03_manifests/   @AWS-Team1/gitops-reviewers
