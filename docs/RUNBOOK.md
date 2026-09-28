@@ -193,7 +193,8 @@ GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics 
 ## 클러스터 삭제 전 LB 정리
 
 이 명령은 Terraform destroy를 실행하지 않습니다. 각 클라우드 컨트롤러가 만든 외부 LB
-리소스만 정리합니다.
+리소스만 정리합니다. GCP 스크립트는 앱 Ingress와 Argo CD Ingress를 함께 제거하며,
+완료된 뒤 GKE를 Terraform으로 삭제합니다.
 
 ```bash
 bash 02_scripts/aws-teardown.sh --confirm
