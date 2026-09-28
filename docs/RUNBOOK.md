@@ -6,11 +6,11 @@
 
 ## 사전 조건
 
-- checkout branch: `dev-0922`
+- checkout branch: `dev`
 - AWS Terraform 적용이 끝났고 코드 서버 역할에 EKS Access Entry가 설정되어 있어야 함
 - GCP Terraform 적용이 끝났고 현재 gcloud 계정에 GKE/Secret Manager 권한이 있어야 함
 - `aws`, `gcloud`, `terraform`, `kubectl`, `helm`, `openssl` 중 해당 플랫폼 도구 설치
-- Argo CD가 읽는 manifest의 `targetRevision`은 `dev-0922`
+- Argo CD가 읽는 manifest의 `targetRevision`은 `dev`
 
 ## 스크립트 목록
 
@@ -46,7 +46,7 @@
    bash 02_scripts/aws-render-runtime.sh --infra-root /home/karfa/work-dir/Infra
    ```
 
-3. 렌더링 결과를 검토해 `dev-0922`에 commit/push합니다. Argo CD는 원격 Git의 값을
+3. 렌더링 결과를 검토해 `dev`에 commit/push합니다. Argo CD는 원격 Git의 값을
    읽으므로 이 단계가 필요합니다.
 
    ```bash
@@ -124,6 +124,12 @@ GCP에는 Terraform output을 GitOps YAML로 치환할 값과 Karpenter/Metrics 
 
    ```bash
    bash 02_scripts/argocd-install.sh gcp
+   read -srp "Slack Webhook URL: " SLACK_WEBHOOK_URL
+   printf '\n'
+   kubectl -n argocd create secret generic argocd-notifications-secret \
+     --from-literal=slack-webhook-url="$SLACK_WEBHOOK_URL" \
+     --dry-run=client -o yaml | kubectl apply -f -
+   unset SLACK_WEBHOOK_URL
    bash 02_scripts/gcp-install-argocd-exposure.sh
    ```
 
