@@ -1,77 +1,28 @@
 # Bank of Anthos GitOps
 
-EKS/GKE용 Bank of Anthos 매니페스트와 Argo CD App-of-Apps 구성을 관리합니다.
-공통 애플리케이션 리소스는 Kustomize base에 두고 클라우드별 설정만 overlay에서 관리합니다.
-EKS/GKE 개발 환경 최초 구축은
-[`docs/DEV_MULTI_CLOUD_BOOTSTRAP_RUNBOOK.md`](docs/DEV_MULTI_CLOUD_BOOTSTRAP_RUNBOOK.md)를 따릅니다.
-클러스터만 재생성할 때는
-[`docs/CLUSTER_REBUILD_RUNBOOK.md`](docs/CLUSTER_REBUILD_RUNBOOK.md), VPN/DMS까지 포함한
-전체 삭제·재구축은 [`docs/FULL_REBUILD_RUNBOOK.md`](docs/FULL_REBUILD_RUNBOOK.md)를 따릅니다.
+EKS/GKE의 Bank of Anthos manifest와 Argo CD App-of-Apps 구성을 관리합니다.
 
-## 구조
+설치·설정·검증은 한 스크립트에 묶지 않습니다. 각 스크립트는 한 가지 작업만 하며,
+실행 순서와 결과는 [`docs/RUNBOOK.md`](docs/RUNBOOK.md)에 정리되어 있습니다.
+
+## 디렉터리
 
 ```text
-01_bootstrap/
-├── argocd-values.yaml
-└── root-application-eks.yaml
-02_scripts/
-├── bootstrap-all.sh
-├── bootstrap.sh
-├── install-argocd.sh
-├── prepare-jwt.sh
-├── prepare-jwt-gcp.sh
-├── render-aws-runtime.sh
-├── verify-argocd.sh
-├── teardown-cluster.sh
-└── teardown-gke.sh
-03_manifests/
-├── base/                         # 공통 Deployment, Service, NetworkPolicy
-│   ├── accounts/
-│   ├── ledger/
-│   └── frontend/
-├── eks/                          # AWS 이미지, RDS, CSI, ALB overlay
-│   ├── applications/
-│   ├── shared/
-│   ├── accounts/
-│   ├── ledger/
-│   └── frontend/
-└── gke/                          # Artifact Registry, Cloud SQL, SecretSync, LB overlay
-    ├── applications/
-    ├── shared/
-    ├── accounts/
-    ├── ledger/
-    └── frontend/
-manual/eks/
-├── *.yaml                    # 최초 서비스/HPA 수동 배포용 전체 YAML
-├── argocd-exposure/           # Argo CD UI ALB 연결 수동 YAML
-└── karpenter/                 # 수동 배포용 EC2NodeClass, NodePool
+01_bootstrap/   Argo CD values, Root Application, GCP Argo CD 노출 manifest
+02_scripts/     한 가지 작업만 수행하는 운영 스크립트
+03_manifests/   EKS/GKE App-of-Apps 및 workload manifest
+manual/eks/     AWS 초기 설정용 manifest
+docs/           실행 런북과 보조 문서
 ```
 
-## 배포 흐름
+Root Application은 `03_manifests/<platform>/applications`를 읽고 `shared`,
+`accounts`, `ledger`, `frontend` Application을 배포합니다. workload를 별도로
+`kubectl apply`하지 않습니다.
+
+## 정적 검증
 
 ```bash
-# Terraform 적용과 render-aws-runtime.sh 실행 후, final-project-dev에서 실행
-bash gitops/02_scripts/bootstrap.sh all
+for file in 02_scripts/*.sh; do bash -n "$file"; done
+kubectl kustomize 03_manifests/overlays/eks/applications
+kubectl kustomize 03_manifests/overlays/gke/applications
 ```
-
-Terraform은 bootstrap 범위가 아니다. 중단 후에는 `prepare`, `apply-root`, `verify` 모드로
-EKS 내부의 큰 단계만 다시 실행한다.
-
-`render-aws-runtime.sh`는 `manual/eks`만 수정한다. Argo CD가 읽는
-`03_manifests/eks/shared/secrets.yaml` 값은 확인 후 직접 수정·commit·push한다.
-
-Root Application은 `applications/`를 읽고, child Application이 `shared`,
-`accounts`, `ledger`, `frontend`를 배포합니다. 워크로드에 직접
-`kubectl apply`를 실행하지 마세요. Argo CD가 유일한 리소스 소유자입니다.
-
-## 검증
-
-```bash
-kubectl kustomize 03_manifests/eks
-kubectl kustomize 03_manifests/gke
-kubectl apply --dry-run=server -f manual/eks/argocd-exposure/targetgroupbinding.yaml
-kubectl kustomize 03_manifests/eks/applications
-kubectl kustomize 03_manifests/gke/applications
-kubectl -n argocd get applications
-```
-

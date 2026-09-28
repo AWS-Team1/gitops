@@ -1,0 +1,71 @@
+# 우리가 작성한 관측 리소스. 플랫폼(CRD·웹훅)이 준비된 뒤에 들어간다.
+#
+# sync-wave -5 — 플랫폼(-25 ~ -15)보다 늦고 앱(-10)보다... 늦다.
+# 앱보다 늦어도 되는 이유는 Instrumentation CR 이 앱 파드 생성 시점에만
+# 필요한 것이 아니라 "파드가 다시 뜰 때" 읽히기 때문이다. 다만 첫 배포에서는
+# 앱이 먼저 떠서 계측 없이 기동할 수 있다 — 그때는 rollout restart 한 번이 필요하다.
+#
+# 순서를 확실히 하려면 이 값을 -12 로 내려 앱보다 앞에 둔다. 그러면 CRD 가
+# 아직 없는 상태에서 CR 적용을 시도할 위험이 커지므로, 플랫폼 Application 이
+# Healthy 가 된 것을 확인한 뒤 내리는 편이 안전하다.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: boa-monitoring
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  project: boa-observability
+
+  # HARD-CODED: 재사용할 GitHub 조직/저장소/브랜치에 맞게 변경한다.
+  source:
+    repoURL: https://github.com/AWS-Team1/gitops.git
+    targetRevision: dev
+    path: 03_manifests/overlays/eks/observability
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  ignoreDifferences:
+    # 오퍼레이터가 수집기 Deployment 의 replicas 를 관리한다.
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+
+    # Secrets Store CSI 가 만든 Secret 은 Git 에 없다. Argo CD 가
+    # "없어야 하는 리소스"로 보고 지우려 들지 않게 한다.
+    - group: ""
+      kind: Secret
+      name: whatap-observability
+      jsonPointers:
+        - /data
+
+    - group: ""
+      kind: Secret
+      name: grafana-admin
+      jsonPointers:
+        - /data
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+
+    syncOptions:
+      - CreateNamespace=false   # base/observability/namespace.yaml 이 만든다
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+      - RespectIgnoreDifferences=true
+      # OpenTelemetryCollector CR 의 config 가 커서 어노테이션 한계를 넘는다.
+      - ServerSideApply=true
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

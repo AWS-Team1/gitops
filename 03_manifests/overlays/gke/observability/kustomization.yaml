@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Grafana 는 없다. GCP 측 층 2 는 Cloud Monitoring 콘솔로 본다 —
+# 대기 사이트에 Grafana 를 띄우면 노드 1대 예산을 관측 UI 가 먹는다.
+# 페일오버 리허설에서 필요하면 EKS 판 grafana.yaml 을 가져다 쓴다.
+resources:
+  - ../../../base/observability
+  - rbac.yaml
+  - secrets.yaml
+  - collector-gateway.yaml
+  - collector-agent.yaml
+  - collector-cluster.yaml
+  - whatap-agent.yaml

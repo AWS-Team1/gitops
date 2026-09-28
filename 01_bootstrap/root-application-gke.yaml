@@ -19,7 +19,7 @@ spec:
   source:
     repoURL: https://github.com/AWS-Team1/gitops.git
     targetRevision: dev
-    path: 03_manifests/gke/applications
+    path: 03_manifests/overlays/gke/applications
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

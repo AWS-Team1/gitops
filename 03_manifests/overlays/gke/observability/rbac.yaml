@@ -1,0 +1,89 @@
+# =========================================================
+# 수집기 ServiceAccount 와 RBAC — GKE
+#
+# EKS 판과 ClusterRole 내용이 동일하다. 다른 것은 자격증명 방식뿐이다.
+#   EKS: Pod Identity      — Terraform 의 aws_eks_pod_identity_association
+#   GKE: Workload Identity — 아래 어노테이션 + GCP 측 IAM 바인딩
+#
+# 주의 — 어노테이션을 비워 두었다. 이 저장소의 다른 GKE SA 두 개
+# (bank-of-anthos · bank-app-secret-sync)도 어노테이션이 없는데,
+# 새 방식(principal:// 직접 바인딩)을 쓰는지 아직 확인되지 않았다.
+# 인프라 담당이 확인한 방식에 맞춰 아래 주석 중 하나를 살린다.
+#   확인 — gcloud iam service-accounts get-iam-policy <GSA> --project kdt4-1-506106
+# =========================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-collector
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+    # 구방식을 쓰는 경우 아래를 살린다. GSA 는 인프라 담당이 만든다.
+    # iam.gke.io/gcp-service-account: boa-otel-collector@kdt4-1-506106.iam.gserviceaccount.com
+  labels:
+    app.kubernetes.io/name: otel-collector
+    app.kubernetes.io/part-of: observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-collector
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - namespaces
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - replicationcontrollers
+      - resourcequotas
+      - persistentvolumes
+      - persistentvolumeclaims
+    verbs: [get, list, watch]
+
+  - apiGroups: [""]
+    resources: [nodes/stats, nodes/metrics]
+    verbs: [get, list, watch]
+
+  - apiGroups: ["apps"]
+    resources: [daemonsets, deployments, replicasets, statefulsets]
+    verbs: [get, list, watch]
+
+  - apiGroups: ["batch"]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+
+  - apiGroups: ["autoscaling"]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+
+  - apiGroups: ["events.k8s.io"]
+    resources: [events]
+    verbs: [get, list, watch]
+
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [get, list, watch]
+
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-collector
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-collector
+subjects:
+  - kind: ServiceAccount
+    name: otel-collector
+    namespace: monitoring

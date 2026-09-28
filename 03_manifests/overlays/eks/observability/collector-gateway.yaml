@@ -1,0 +1,316 @@
+# =========================================================
+# 수집기 게이트웨이 (Deployment 모드)
+#
+# 역할 — 앱 6개의 OTLP 를 받아 마스킹하고 두 곳으로 내보낸다.
+#   1. 와탭      : 같은 파드의 whatap-otel 사이드카 → 127.0.0.1:6601
+#   2. S3        : 장기 보관(awss3) — 와탭 보존 기간과 무관한 우리 쪽 원본
+#
+# CloudWatch 전송은 비용과 정책 복잡도를 다시 검토할 때까지 비활성화했다.
+# 마스킹은 와탭과 S3 양쪽에 내보내기 전에 이 수집기에서 한 번 수행한다.
+#
+# 클러스터 지표(kubeletstats · k8s_cluster)는 이 게이트웨이가 아니라
+# collector-agent.yaml 의 데몬셋이 모은다.
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: otel-gateway
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  mode: deployment
+  replicas: 2
+
+  # Pod Identity 가 이 SA 에 붙는다. Infra/aws-observability 의
+  # collector_service_account 와 이름이 같아야 한다.
+  serviceAccount: otel-collector
+
+  image: otel/opentelemetry-collector-contrib:0.137.0
+
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 200m
+      memory: 512Mi
+
+  env:
+    # 와탭 사이드카가 읽는 값. 아래 whatap-otel 컨테이너와 같은 시크릿을 쓴다.
+    - name: AWS_REGION
+      value: ap-northeast-2
+
+  # 와탭 OpenTelemetry 에이전트를 사이드카로 넣는다.
+  # 공식 문서가 "같은 파드"를 전제하므로 엔드포인트가 127.0.0.1 이다 —
+  # 별도 Service 로 빼면 문서에 없는 구성이 된다.
+  #
+  # 주의 — 이 에이전트는 베타다. 와탭 문서가 운영 환경 비권장을 명시한다.
+  additionalContainers:
+    - name: whatap-otel
+      image: whatap/whatap-otel:latest
+
+      ports:
+        - name: otlp-whatap
+          containerPort: 6601
+          protocol: TCP
+
+      env:
+        # 변수 이름은 OpenTelemetry 에이전트 전용이다. 쿠버네티스 에이전트의
+        # WHATAP_LICENSE / WHATAP_HOST / WHATAP_PORT 와 이름이 다르다 —
+        # 섞으면 에이전트가 액세스 키를 빈 값으로 읽고 조용히 접속에 실패한다.
+        # 근거: docs.whatap.io/opentelemetry/install-agent "환경 변수로 설정하기"
+        - name: WHATAP_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: whatap-observability
+              key: application_license
+
+        # 형식은 수집 서버 IP 두 개를 슬래시로 잇는다 — 1.1.1.1/2.2.2.2
+        # 단일 IP 로 동작하는지는 확인되지 않았다(변경 내역 미결 항목).
+        - name: WHATAP_SERVER_HOST
+          valueFrom:
+            secretKeyRef:
+              name: whatap-observability
+              key: host
+
+        # 사이드카가 OTLP 를 "받는" 포트다. 같은 파드의 수집기가
+        # otlp/whatap exporter 로 127.0.0.1:6601 에 보낸다.
+        #
+        # 6600 이 아니라 6601 인 이유 — 와탭 수집 서버 포트도 6600 이다.
+        # 같은 숫자가 방향만 다른 두 뜻으로 쓰이면 반드시 헷갈린다.
+        # 받는 쪽만 한 칸 올려 눈으로 구분되게 했다.
+        #   6600 = 나가는 목적지 (와탭 수집 서버, 시크릿의 port 값)
+        #   6601 = 들어오는 문   (이 사이드카)
+        #
+        # 기본값이 아니므로 이미지가 이 값을 실제로 따르는지 확인이 필요하다 —
+        # 수집기 로그에 connection refused 가 없으면 따른 것이다.
+        - name: WHATAP_OTEL_GRPC_SERVER_PORT
+          value: "6601"
+
+        # 지표와 로그는 기본값이 꺼짐이다. 명시적으로 켠다.
+        - name: otel_metric_server_enabled
+          value: "true"
+
+        - name: otel_log_server_enabled
+          value: "true"
+
+        # 트랜잭션 이름을 무엇으로 볼지. 기본 목록의 첫 항목이 http.url 인데,
+        # 이 앱의 URL 에는 계좌번호가 들어간다(/balances/{accountId}).
+        # http.route 를 앞에 두어 경로 템플릿으로 집계되게 한다.
+        - name: otel_attr_tx_url_keys
+          value: "http.route,url.template,http.target"
+
+      resources:
+        limits:
+          cpu: 500m
+          memory: 512Mi
+        requests:
+          cpu: 100m
+          memory: 256Mi
+
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      # 메모리 한계에 닿으면 수신을 거절해 OOMKill 을 피한다.
+      # 반드시 파이프라인의 첫 프로세서여야 한다.
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 20
+
+      # 파드 IP 로 쿠버네티스 메타데이터를 붙인다. 이것이 있어야 와탭·CloudWatch
+      # 양쪽에서 "어느 파드의 어느 컨테이너인가"가 나온다.
+      k8sattributes:
+        auth_type: serviceAccount
+        passthrough: false
+
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.deployment.name
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.node.name
+            - k8s.container.name
+
+          labels:
+            - tag_name: app
+              key: app
+              from: pod
+
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+          - sources:
+              - from: connection
+
+      # EC2·EKS 메타데이터. 노드가 어느 AZ 인지가 DR 판단에 필요하다.
+      resourcedetection:
+        detectors: [env, eks, ec2]
+        timeout: 5s
+        override: false
+
+      resource:
+        attributes:
+          - key: cloud.provider
+            value: aws
+            action: upsert
+          - key: deployment.environment
+            value: dev
+            action: upsert
+
+      # ---------------------------------------------------------
+      # 마스킹 1 — 속성 삭제
+      # ---------------------------------------------------------
+      # 계좌번호가 실제로 들어오는 경로가 URL 이다. 세 자바 서비스의 엔드포인트가
+      # 전부 경로 파라미터를 쓴다.
+      #   GET  /balances/{accountId}      (balancereader)
+      #   GET  /transactions/{accountId}  (transactionhistory)
+      # url.path 를 지우고 http.route(템플릿)만 남긴다.
+      redaction:
+        allow_all_keys: true
+
+        blocked_key_patterns:
+          - "url\\.full"
+          - "url\\.query"
+          - "http\\.url"
+          - "http\\.target"
+          - ".*authorization.*"
+          - ".*password.*"
+          - ".*secret.*"
+          - ".*token.*"
+          - ".*api[_-]?key.*"
+          - ".*cookie.*"
+
+        # 값 자체가 계좌번호 형태면 지운다. 키 이름을 못 맞춘 경우의 안전망이다.
+        blocked_values:
+          # Go 정규식(RE2)은 전방·후방 탐색을 지원하지 않는다. 앞서
+          # "(?<![0-9])[0-9]{10}(?![0-9])" 로 적었다가 수집기가 기동조차
+          # 못 했다 — invalid named capture 로 파이프라인 구성에서 실패한다.
+          #
+          # \b(단어 경계)는 RE2 가 지원하고, 숫자는 단어 문자이므로 더 긴
+          # 숫자열 안쪽에는 걸리지 않는다. 13자리 epoch 밀리초를 계좌번호로
+          # 오인하지 않는다는 원래 의도가 그대로 유지된다.
+          #
+          # 원본과 다른 점 — 문자·밑줄에 바로 붙은 경우("acct1234567890")는
+          # 여기서 안 걸린다. 그 경우는 아래 transform 의 replace_pattern 이
+          # 경계 없이 [0-9]{10} 으로 잡으므로 두 겹으로 덮인다.
+          - "\\b[0-9]{10}\\b"
+
+        summary: debug
+
+      # ---------------------------------------------------------
+      # 마스킹 2 — 남은 경로에서 숫자 치환
+      # ---------------------------------------------------------
+      # redaction 이 키 단위로 지우고, 여기서 남은 문자열 안의 숫자를 바꾼다.
+      # 스팬 이름에 계좌번호가 들어간 경우(자바 에이전트가 route 를 못 잡을 때)를 잡는다.
+      transform:
+        error_mode: ignore
+
+        trace_statements:
+          - context: span
+            statements:
+              - replace_pattern(name, "[0-9]{10}", "{accountId}")
+              - replace_pattern(attributes["url.path"], "[0-9]{10}", "{accountId}")
+
+        log_statements:
+          - context: log
+            statements:
+              - replace_pattern(body, "[0-9]{10}", "{accountId}")
+              - replace_pattern(body, "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
+
+      batch:
+        send_batch_size: 8192
+        send_batch_max_size: 10000
+        timeout: 5s
+
+    exporters:
+      # --- 와탭 (같은 파드 사이드카) ---
+      otlp/whatap:
+        endpoint: 127.0.0.1:6601
+        tls:
+          insecure: true
+
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 1000
+
+      # --- S3 장기 보관 ---
+      # s3_bucket 은 Infra/aws-observability 의 telemetry_bucket_name 출력값이다.
+      # 계정 ID 가 접미사이므로 apply 후 실제 값으로 바꿔야 한다.
+      awss3:
+        s3uploader:
+          region: ap-northeast-2
+          s3_bucket: boa-telemetry-archive-769413326616
+          s3_prefix: eks/boa-eks
+          s3_partition_format: "year=%Y/month=%m/day=%d/hour=%H"
+
+        marshaler: otlp_json
+
+      # 문제 추적용. 평상시에는 basic 으로 두고 필요할 때만 detailed 로 올린다.
+      debug:
+        verbosity: basic
+
+    service:
+      telemetry:
+        logs:
+          level: info
+
+        metrics:
+          # 수집기 자신의 지표. 아래 pipeline 이 아니라 Prometheus 엔드포인트로 나간다.
+          level: detailed
+
+      pipelines:
+        # 순서가 의미를 갖는다 —
+        #   memory_limiter → k8sattributes → resourcedetection → resource
+        #   → redaction → transform → batch
+        # 마스킹이 batch 앞에 있어야 한다. batch 뒤에 두면 이미 내보내진 뒤다.
+        traces:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resourcedetection
+            - resource
+            - redaction
+            - transform
+            - batch
+          exporters: [otlp/whatap, awss3]
+
+        metrics:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resourcedetection
+            - resource
+            - batch
+          exporters: [otlp/whatap]
+
+        # 전량 — 와탭(조회)과 S3(장기 보관)
+        logs:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resourcedetection
+            - resource
+            - redaction
+            - transform
+            - batch
+          exporters: [otlp/whatap, awss3]

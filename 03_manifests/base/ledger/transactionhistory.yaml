@@ -12,6 +12,10 @@ spec:
     metadata:
       labels:
         app: transactionhistory
+      annotations:
+        # OpenTelemetry 오퍼레이터의 변경 웹훅이 이 값을 읽어 자바 에이전트를 주입한다.
+        # 값은 <Instrumentation 네임스페이스>/<이름>. base 에 두면 EKS·GKE 양쪽에 적용된다.
+        instrumentation.opentelemetry.io/inject-java: "bank-of-anthos/boa"
     spec:
       serviceAccountName: bank-of-anthos
       affinity:

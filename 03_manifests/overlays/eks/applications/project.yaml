@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: boa
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-30"
+spec:
+  # ---------------------------------------------------------
+  # 앱 전용 프로젝트
+  # ---------------------------------------------------------
+  # 2026-09-27 축소. 관측 스택이 boa-observability 로 떠나면서 그들을 위해
+  # 열어 뒀던 권한을 되돌렸다. 여기 남는 Application 은 넷뿐이다.
+  #
+  #   boa-shared · boa-accounts · boa-ledger · boa-frontend
+  #
+  # 렌더로 확인한 결과 넷이 쓰는 것은 저장소 하나, 네임스페이스 하나,
+  # 클러스터 스코프 리소스 하나(Namespace)가 전부다.
+  #
+  # 관측 권한이 필요하면 overlays/eks/applications/project-observability.yaml
+  # 에 추가한다. 여기 되돌리지 말 것 — 그러면 앱 Application 이 Git 에
+  # ClusterRole 을 넣기만 해도 Argo CD 가 클러스터 전역 권한을 만들어 준다.
+  # ---------------------------------------------------------
+  sourceRepos:
+    - https://github.com/AWS-Team1/gitops.git
+
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: bank-of-anthos
+
+  # Namespace 하나만 남긴다. shared 오버레이가 bank-of-anthos 를 만든다.
+  # 이걸 빼면 앱 배포가 통째로 막히므로 지우지 말 것.
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+
+  # SecretProviderClass·HorizontalPodAutoscaler 등은 전부 네임스페이스
+  # 리소스라 여기서 덮인다.
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

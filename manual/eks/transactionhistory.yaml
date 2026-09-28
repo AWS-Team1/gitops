@@ -23,7 +23,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
         - name: transactionhistory
-          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-transactionhistory:sha-c2853726f19ad8da481ee88c7ff11d0b47e7aa3c
+          image: 769413326616.dkr.ecr.ap-northeast-2.amazonaws.com/boa-transactionhistory:sha-c4e38dfb9b9a08a8a2cd06fa445f4cd8d66a7389
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -61,6 +61,25 @@ spec:
               value: "$(POSTGRES_USER)"
             - name: SPRING_DATASOURCE_PASSWORD
               value: "$(POSTGRES_PASSWORD)"
+            - name: VALKEY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: host
+            - name: VALKEY_PORT
+              value: "6379"
+            - name: VALKEY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: username
+            - name: VALKEY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: valkey-secret
+                  key: password
+            - name: VALKEY_TLS
+              value: "true"
             - name: SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE
               value: "3"
           volumeMounts:
@@ -128,4 +147,14 @@ spec:
         - port: 53
           protocol: UDP
         - port: 53
+          protocol: TCP
+    - to:
+        - ipBlock:
+            cidr: 192.168.24.0/24
+        - ipBlock:
+            cidr: 192.168.25.0/24
+      ports:
+        - port: 6379
+          protocol: TCP
+        - port: 6380
           protocol: TCP

@@ -3,8 +3,9 @@ name: Publish Helm chart and deploy
 on:
   workflow_dispatch:
   push:
-    branches: [dev-0922]
+    branches: [dev]
     paths:
+      - 03_manifests/**
       - charts/boa-platform-chart/**
       - .github/workflows/publish-helm-chart.yml
 
@@ -17,6 +18,8 @@ env:
   ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
   HELM_CHART_REPOSITORY: ${{ vars.HELM_CHART_REPOSITORY }}
   AWS_DEPLOY_QUEUE_URL: ${{ vars.AWS_DEPLOY_QUEUE_URL }}
+  AWS_SECRET_PREFIX: ${{ vars.AWS_SECRET_PREFIX }}
+  RDS_MASTER_SECRET_ARN: ${{ vars.RDS_MASTER_SECRET_ARN }}
 
 concurrency:
   group: aws-dev-chart-publish
@@ -30,15 +33,54 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          role-to-assume: arn:aws:iam::769413326616:role/boa-github-argo-workflows-deploy-dev
+          role-to-assume: ${{ vars.AWS_PUBLISH_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Lint and package chart
+      - name: Render application manifests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          chart=./charts/boa-platform-chart
+          rendered="$chart/templates/bank-of-anthos.yaml"
+
+          mkdir -p "$chart/templates"
+          kubectl kustomize ./03_manifests/overlays/eks-natless > "$rendered"
+
+          account_id="${ECR_REGISTRY%%.*}"
+
+          test "$AWS_SECRET_PREFIX" = /infra-tf
+          printf '%s' "$RDS_MASTER_SECRET_ARN" |
+              grep -Eq "^arn:aws:secretsmanager:${AWS_REGION}:${account_id}:secret:rds!db-"
+
+          sed -i "s|/boa/database/|${AWS_SECRET_PREFIX}/database/|g" "$rendered"
+          sed -i "s|/boa/jwt/|${AWS_SECRET_PREFIX}/jwt/|g" "$rendered"
+          test "$(grep -c 'secret:rds!db-' "$rendered")" -eq 1
+          sed -i -E "s|arn:aws:secretsmanager:[^:\"]+:[0-9]{12}:secret:rds!db-[^\"]+|${RDS_MASTER_SECRET_ARN}|g" "$rendered"
+
+          grep -Fq "$RDS_MASTER_SECRET_ARN" "$rendered"
+          ! grep -q 'objectName: "/boa/' "$rendered"          
+          
+          test -s "$rendered"
+          grep -q '^kind: Deployment$' "$rendered"
+          grep -q '^kind: Service$' "$rendered"
+          ! grep -q '^kind: Namespace$' "$rendered"
+          ! grep -q 'argocd.argoproj.io/tracking-id' "$rendered"
+
+          images="$(awk '$1 == "image:" {print $2}' "$rendered")"
+          test -n "$images"
+          bad_images="$(printf '%s\n' "$images" | grep -v "^${ECR_REGISTRY}/" || true)"
+          if [ -n "$bad_images" ]; then
+            printf 'public or unexpected image:\n%s\n' "$bad_images" >&2
+            exit 1
+          fi
+
+      - name: Package chart
         shell: bash
         run: |
           set -Eeuo pipefail
           version="0.1.0-dev.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
-          helm lint ./charts/boa-platform-chart
+          helm template bank-of-anthos ./charts/boa-platform-chart \
+            --namespace bank-of-anthos >/dev/null          
           helm package ./charts/boa-platform-chart \
             --version "$version" \
             --app-version "$GITHUB_SHA" \

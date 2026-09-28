@@ -1,0 +1,11 @@
+---
+# Source: bank-of-anthos/templates/networkpolicy-default-deny.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all          # 모든 트래픽 차단 기본 정책
+spec:
+  podSelector: {}                 # {} = 네임스페이스 내 모든 Pod에 적용 (6개 서비스 전부 대상)
+  policyTypes:
+    - Ingress                     # 들어오는 트래픽 전체 차단
+    - Egress                      # 나가는 트래픽 전체 차단

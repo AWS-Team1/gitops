@@ -1,0 +1,230 @@
+# =========================================================
+# Grafana — CloudWatch 데이터소스 전용
+#
+# 이 Grafana 는 층 2(AWS 리소스 지표)만 본다. 층 1(앱·클러스터)은 와탭 화면에서
+# 본다. 두 화면을 합치지 않은 이유는 와탭이 CloudWatch 를 데이터소스로 받지
+# 못하기 때문이다(와탭 클라우드 모니터링 제품은 종료 예정).
+#
+# 설계상의 약점 — 관측 수단이 관측 대상과 같은 클러스터에 있다. EKS 가 죽으면
+# 이 Grafana 도 죽고, 그때 CloudWatch 를 볼 수단이 AWS 콘솔뿐이 된다.
+# 그래서 이것은 "평상시 편의"이고, 장애 시 정식 경로는 CloudWatch 콘솔이다.
+# 이 점을 발표에서 먼저 밝히는 편이 낫다.
+#
+# 대상 등록은 Terraform 이 하지 않는다. 아래 TargetGroupBinding 이 파드 IP 를
+# aws-observability 가 만든 대상 그룹에 넣는다.
+# =========================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+data:
+  datasources.yaml: |
+    apiVersion: 1
+
+    datasources:
+      # Pod Identity 로 자격증명을 받으므로 키를 넣지 않는다.
+      # authType: default 가 환경의 자격증명 체인을 쓴다는 뜻이다.
+      - name: CloudWatch
+        type: cloudwatch
+        uid: cloudwatch-apne2
+        isDefault: true
+
+        jsonData:
+          authType: default
+          defaultRegion: ap-northeast-2
+
+          # CloudWatch 신규 전송은 비활성화했지만 기존 EMF 지표 조회를 위해
+          # 데이터소스와 네임스페이스 등록은 보존한다.
+          customMetricsNamespaces: BoA/Observability
+
+        editable: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+  labels:
+    app: grafana
+    app.kubernetes.io/name: grafana
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: grafana
+
+  template:
+    metadata:
+      labels:
+        app: grafana
+        app.kubernetes.io/name: grafana
+    spec:
+      serviceAccountName: grafana
+
+      securityContext:
+        # grafana 이미지의 기본 사용자. emptyDir 소유권을 맞춘다.
+        fsGroup: 472
+        runAsUser: 472
+        runAsGroup: 472
+
+      containers:
+        - name: grafana
+          image: grafana/grafana:11.6.6
+
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin_user
+
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin_password
+
+            # ops ALB 가 TLS 를 끝내고 HTTP 로 넘긴다. argocd 와 같은 구성이다.
+            - name: GF_SERVER_ROOT_URL
+              value: https://grafana.bespinglobal.site
+
+            # 익명 접근을 막는다. ALB 앞단에 인증이 없으므로 여기가 유일한 관문이다.
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+
+            # 가입·알림 비활성화. 실습 환경에서 외부 호출이 나가지 않게 한다.
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+
+            - name: GF_ANALYTICS_REPORTING_ENABLED
+              value: "false"
+
+            - name: GF_ANALYTICS_CHECK_FOR_UPDATES
+              value: "false"
+
+            # 플러그인을 미리 넣지 않는다. CloudWatch 는 코어 데이터소스다.
+            - name: GF_INSTALL_PLUGINS
+              value: ""
+
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+
+            # 대시보드와 사용자 정보가 여기 들어간다. emptyDir 이므로 파드가
+            # 재시작하면 사라진다 — 대시보드는 코드로 관리하고 사람이 만든 것은
+            # 남지 않는다는 뜻이다. 남겨야 하면 PVC(gp3)로 바꾼다.
+            - name: data
+              mountPath: /var/lib/grafana
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  type: ClusterIP
+
+  selector:
+    app: grafana
+
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000
+---
+# ALB 대상 그룹에 파드 IP 를 등록한다. argocd 의 것과 같은 패턴이다
+# (manual/eks/argocd-exposure/targetgroupbinding.yaml 참조).
+#
+# targetGroupARN 은 Infra/aws-observability 의 grafana_target_group_arn 출력값이다.
+# apply 후 실제 ARN 으로 바꿔야 한다 — 아래 값은 자리표시자다.
+#
+# networking.ingress 가 없으면 컨트롤러가 파드 SG 를 열어주지 않아
+# 헬스체크가 전부 실패한다. ALB SG 는 aws-ops 의 ops_alb_security_group_id 다.
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: grafana
+  namespace: monitoring
+  annotations:
+    # Service 가 먼저 있어야 한다.
+    argocd.argoproj.io/sync-wave: "15"
+spec:
+  serviceRef:
+    name: grafana
+    port: 80
+
+  targetType: ip
+
+  # PLACEHOLDER — terraform output -raw grafana_target_group_arn 값으로 교체
+# ---------------------------------------------------------
+# REPLACE_ME 는 그대로 두는 값이다
+# ---------------------------------------------------------
+# 아래 두 값은 사람이 손으로 채우지 않는다. 배포 런북 2단계의
+# 02_scripts/aws-render-runtime.sh 가 Terraform output 에서 읽어 sed 로
+# 써 넣고, 3단계에서 그 결과를 커밋·푸시한다. Argo CD 는 원격 Git 만 보므로
+# 푸시하지 않으면 렌더해도 효과가 없다.
+#
+#   targetGroupARN : Infra/aws-observability 의 grafana_target_group_arn
+#   groupID        : Infra/aws-ops 의 ops_alb_security_group_id
+#                    (Grafana 대상 그룹이 ops ALB 에 붙으므로 같은 SG 다)
+#
+# 클러스터를 다시 세우면 ARN 이 바뀐다. 그때도 스크립트가 채우므로
+# 여기를 직접 수정하지 말 것 — 다음 렌더에서 덮어써진다.
+# ---------------------------------------------------------
+  targetGroupARN: arn:aws:elasticloadbalancing:ap-northeast-2:769413326616:targetgroup/boa-grafana-tg/12a06aeb302be4e9 # aws-render-runtime.sh로 갱신
+
+  networking:
+    ingress:
+      - from:
+          - securityGroup:
+              # PLACEHOLDER — terraform output -raw ops_alb_security_group_id (aws-ops)
+              groupID: sg-0da61788baa6cdc5c # aws-render-runtime.sh로 갱신
+
+        ports:
+          - protocol: TCP
+            port: 3000
