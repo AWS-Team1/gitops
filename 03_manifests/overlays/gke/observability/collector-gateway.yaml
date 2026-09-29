@@ -178,22 +178,54 @@ spec:
           # 경계 없이 [0-9]{10} 으로 잡으므로 두 겹으로 덮인다.
           - "\\b[0-9]{10}\\b"
 
+          # 9자리 라우팅번호(LOCAL_ROUTING_NUM). 송금 로그에 계좌번호와
+          # 나란히 찍히는 값이다. Terraform 의 CloudWatch 데이터 보호 정책
+          # (aws-modules/observability/variables.tf 의 BoaRoutingNumber)에는
+          # 있었는데 수집기 쪽에만 빠져 있었다.
+          #
+          # 단어 경계를 붙인다 — 경계 없이 걸면 10자리·13자리 숫자 안쪽까지
+          # 잘라먹는다. 대신 "rt123456789" 처럼 문자에 붙은 경우는 놓친다.
+          - "\\b[0-9]{9}\\b"
+
         summary: debug
 
+      # 경로에 context 접두사(span. / log.)를 붙인다. 안 붙이면 수집기가
+      # 기동 로그에 "one or more paths were modified to include their context
+      # prefix, please rewrite them accordingly" 를 남기고 알아서 고쳐 쓴다.
+      # 지금 동작은 같지만 명시해 두는 편이 낫다.
+      #
+      # 순서가 중요하다 — 10자리를 먼저 치환해야 한다. 9자리를 먼저 걸면
+      # 10자리 숫자의 앞 9자리만 잘라먹고 한 자리가 남는다.
       transform:
         error_mode: ignore
 
         trace_statements:
           - context: span
             statements:
-              - replace_pattern(name, "[0-9]{10}", "{accountId}")
-              - replace_pattern(attributes["url.path"], "[0-9]{10}", "{accountId}")
+              - replace_pattern(span.name, "[0-9]{10}", "{accountId}")
+              - replace_pattern(span.name, "\\b[0-9]{9}\\b", "{routingNum}")
+
+              # 속성 맵 전체를 훑는다. 전에는 url.path 하나만 봐서
+              # db.statement · exception.message · http.request.body 에 들어간
+              # 계좌번호가 그대로 나갔다. redaction 의 blocked_values 는 값
+              # '전체'가 그 형태일 때만 걸리므로 문장 안쪽은 못 잡는다.
+              - replace_all_patterns(span.attributes, "value", "[0-9]{10}", "{accountId}")
+              - replace_all_patterns(span.attributes, "value", "\\b[0-9]{9}\\b", "{routingNum}")
+
+              # JWT 치환이 로그에만 있었다. 자동계측이 요청 헤더를 캡처하므로
+              # (instrumentation.yaml 의 CAPTURE_HEADERS) 스팬 속성에도 들어온다.
+              - replace_all_patterns(span.attributes, "value", "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
 
         log_statements:
           - context: log
             statements:
-              - replace_pattern(body, "[0-9]{10}", "{accountId}")
-              - replace_pattern(body, "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
+              - replace_pattern(log.body, "[0-9]{10}", "{accountId}")
+              - replace_pattern(log.body, "\\b[0-9]{9}\\b", "{routingNum}")
+              - replace_pattern(log.body, "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
+
+              - replace_all_patterns(log.attributes, "value", "[0-9]{10}", "{accountId}")
+              - replace_all_patterns(log.attributes, "value", "\\b[0-9]{9}\\b", "{routingNum}")
+              - replace_all_patterns(log.attributes, "value", "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
 
       batch:
         send_batch_size: 8192
