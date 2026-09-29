@@ -16,7 +16,7 @@ spec:
     kind: Deployment
     name: frontend
   minReplicas: 2
-  maxReplicas: 3
+  maxReplicas: 15
   metrics:
     - type: Resource
       resource:
@@ -36,7 +36,7 @@ spec:
     kind: Deployment
     name: userservice
   minReplicas: 2
-  maxReplicas: 3
+  maxReplicas: 15
   metrics:
     - type: Resource
       resource:
@@ -56,7 +56,7 @@ spec:
     kind: Deployment
     name: contacts
   minReplicas: 2
-  maxReplicas: 3
+  maxReplicas: 15
   metrics:
     - type: Resource
       resource:
@@ -76,7 +76,7 @@ spec:
     kind: Deployment
     name: ledgerwriter
   minReplicas: 2
-  maxReplicas: 3
+  maxReplicas: 15
   metrics:
     - type: Resource
       resource:
@@ -96,7 +96,7 @@ spec:
     kind: Deployment
     name: balancereader
   minReplicas: 2
-  maxReplicas: 3
+  maxReplicas: 15
   metrics:
     - type: Resource
       resource:
@@ -116,7 +116,7 @@ spec:
     kind: Deployment
     name: transactionhistory
   minReplicas: 2
-  maxReplicas: 3
+  maxReplicas: 15
   metrics:
     - type: Resource
       resource:
