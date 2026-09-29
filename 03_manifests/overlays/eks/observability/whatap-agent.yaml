@@ -44,47 +44,16 @@ metadata:
     # 수집기와 같은 10 을 쓴다 — 이 CR 은 monitoring 쪽 시크릿에 의존하지 않는다.
     argocd.argoproj.io/sync-wave: "10"
 spec:
-  # ---------------------------------------------------------
-  # 2026-09-29 두 에이전트를 껐다 — 중복 수집 제거
-  # ---------------------------------------------------------
-  # 이 에이전트들이 모으던 것을 OpenTelemetry 가 이미 전부 모으고 있다.
-  # 와탭 문서가 밝힌 수집 범위와 대조한 결과다.
-  #
-  #   컨테이너 CPU·Memory  → kubeletstats (metric_groups: node·pod·container)
-  #   Disk(Volume)         → kubeletstats + hostmetrics.disk·filesystem
-  #   Network              → hostmetrics.network
-  #   Namespace·Deployment·ReplicaSet·Pod 등 → k8s_cluster
-  #
-  # 오히려 OTel 쪽이 넓다 — node_conditions_to_report 에 MemoryPressure·
-  # DiskPressure·PIDPressure 가 있고, k8sobjects 가 type=Warning 이벤트
-  # (OOMKilled·FailedScheduling)를 가져온다.
-  #
-  # 마스킹은 이 판단의 근거가 아니다. 이 에이전트가 보내던 것은 지표와
-  # 오브젝트 상태뿐이라 민감정보가 들어갈 자리가 없고, 우리 게이트웨이도
-  # metrics 파이프라인에는 마스킹을 걸지 않는다. 근거는 중복 제거와
-  # 구성 단순화뿐이다.
-  #
-  # ---------------------------------------------------------
-  # 대가 — 와탭 쿠버네티스 프로젝트 화면이 빈다
-  # ---------------------------------------------------------
-  # 이 화면을 채우던 것이 바로 이 두 에이전트다. OTel 이 보내는 k8s.* 지표는
-  # whatap-otel 사이드카를 거쳐 *애플리케이션* 프로젝트로 가고, 그 데이터로
-  # 쿠버네티스 화면이 그려지는지는 **확인되지 않았다.**
-  # (와탭 OTel 문서는 애플리케이션 제품만 안내한다)
-  #
-  # 확인 방법은 exp/whatap-k8s-via-otel 브랜치와
-  # docs/experiment-whatap-k8s-via-otel.md 에 있다. 되돌리려면 아래 두 값을
-  # true 로 돌리거나 backup/dev-20260929 브랜치를 참조한다.
   features:
     k8sAgent:
       # 클러스터 단위 구성 정보를 모아 보낸다. 노드당이 아니라 클러스터당 하나다.
       masterAgent:
-        enabled: false
+        enabled: true
 
       # 노드마다 뜨는 DaemonSet. 컨테이너 런타임 소켓을 읽어 파드·컨테이너
       # 지표를 만든다. 소켓 경로가 틀리면 파드는 Running 인데 지표가 비어 있다.
       nodeAgent:
-        enabled: false
+        enabled: true
 
         # EKS AL2023 의 기본 런타임이다. 와탭 콘솔의 에이전트 설치 화면에서
         # 런타임을 고르면 아래 두 값이 자동으로 채워진다.
