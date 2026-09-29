@@ -108,6 +108,68 @@ spec:
           cpu: 100m
           memory: 256Mi
 
+    # =====================================================
+    # 실험 — 쿠버네티스 프로젝트로 보내는 두 번째 사이드카
+    # =====================================================
+    # 목적: master-agent·node-agent 를 뺄 수 있는지 판단한다.
+    #
+    # 수집 범위는 이미 OTel 이 덮고 있다(kubeletstats 의 node·pod·container,
+    # hostmetrics, k8s_cluster). 와탭 문서가 밝힌 에이전트 수집 범위
+    # "컨테이너의 CPU, Memory, Disk, Network / Namespace·Deployment·
+    # ReplicaSet·Pod 등 구성 요소"와 대조하면 빠지는 항목이 없다.
+    #
+    # 그래서 남은 질문은 하나뿐이다 —
+    #   와탭이 OTLP 로 받은 k8s.* 지표로 쿠버네티스 화면을 그려 주는가.
+    #
+    # 사이드카는 액세스 키를 하나만 갖는다(WHATAP_ACCESSKEY 가 단수).
+    # 프로젝트가 둘이므로 컨테이너도 둘이어야 한다.
+    #   6601 = 애플리케이션 프로젝트 (위 whatap-otel)
+    #   6602 = 쿠버네티스 프로젝트   (이 컨테이너)
+    #
+    # 주의 — 이 에이전트는 애플리케이션 제품용으로 문서화돼 있다.
+    # docs.whatap.io/opentelemetry/install-agent 가 "애플리케이션(Application)
+    # 제품의 프로젝트로 이동하세요" 라고만 쓴다. 쿠버네티스 프로젝트 연동은
+    # 문서에 없다 — 그래서 이게 실험이다. 콘솔에 프로젝트 액세스 키가
+    # 존재한다는 것까지는 확인했다(프로젝트 관리 화면).
+    - name: whatap-otel-k8s
+      image: whatap/whatap-otel:latest
+
+      ports:
+        - name: otlp-wtk8s
+          containerPort: 6602
+          protocol: TCP
+
+      env:
+        # 쿠버네티스 프로젝트(boa-aws-eks)의 프로젝트 액세스 키.
+        # whatap-monitoring 의 WHATAP_LICENSE 와 같은 값이다.
+        - name: WHATAP_ACCESSKEY
+          valueFrom:
+            secretKeyRef:
+              name: whatap-observability
+              key: kubernetes_license
+
+        - name: WHATAP_SERVER_HOST
+          valueFrom:
+            secretKeyRef:
+              name: whatap-observability
+              key: host
+
+        - name: WHATAP_OTEL_GRPC_SERVER_PORT
+          value: "6602"
+
+        # 지표만 보낸다. 트레이스·로그는 애플리케이션 프로젝트로만 간다 —
+        # 쿠버네티스 제품이 그것들을 받아 쓰는지는 확인된 바 없다.
+        - name: otel_metric_server_enabled
+          value: "true"
+
+      resources:
+        limits:
+          cpu: 300m
+          memory: 256Mi
+        requests:
+          cpu: 50m
+          memory: 128Mi
+
   config:
     receivers:
       otlp:
@@ -227,6 +289,33 @@ spec:
               - replace_pattern(body, "[0-9]{10}", "{accountId}")
               - replace_pattern(body, "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
 
+      # ---------------------------------------------------------
+      # 실험 — 쿠버네티스 프로젝트로 보낼 지표만 고른다
+      # ---------------------------------------------------------
+      # 파이프라인은 출처가 아니라 신호 종류로 나뉜다. metrics 하나에
+      # 앱 런타임 지표(jvm.*, http.server.*)와 인프라 지표(k8s.*, container.*,
+      # system.*)가 섞여 들어온다. 거르지 않으면 앱 지표까지 쿠버네티스
+      # 프로젝트로 간다.
+      #
+      # include 를 쓰므로 여기 적힌 것만 통과한다.
+      #   k8s.*       k8s_cluster · kubeletstats
+      #   container.* kubeletstats 의 container 그룹
+      #   system.*    hostmetrics
+      #
+      # 미검증 — 이 수집기(0.137.0)에서 filter 의 include/match_type 구문이
+      # 그대로 받아들여지는지 실행으로 확인하지 않았다. 거부되면 수집기가
+      # 기동조차 못 한다(19항의 RE2 사고와 같은 종류). 최초 적용 때
+      # otc-container 로그를 반드시 확인할 것.
+      # OTTL 대안: metrics.metric: ['not IsMatch(name, "^(k8s|container|system)\\.")']
+      filter/k8s_only:
+        metrics:
+          include:
+            match_type: regexp
+            metric_names:
+              - "^k8s\\..*"
+              - "^container\\..*"
+              - "^system\\..*"
+
       batch:
         send_batch_size: 8192
         send_batch_max_size: 10000
@@ -249,6 +338,26 @@ spec:
           enabled: true
           num_consumers: 4
           queue_size: 1000
+
+      # --- 실험: 쿠버네티스 프로젝트 ---
+      # 같은 파드의 whatap-otel-k8s 사이드카. 위 otlp/whatap 과 포트만 다르다.
+      otlp/whatap_k8s:
+        endpoint: 127.0.0.1:6602
+        tls:
+          insecure: true
+
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_interval: 30s
+          max_elapsed_time: 300s
+
+        # 실험이므로 본 경로보다 작게 잡는다. 여기가 막혀도 애플리케이션
+        # 프로젝트로 가는 본 경로에 역압이 걸리지 않게 한다.
+        sending_queue:
+          enabled: true
+          num_consumers: 2
+          queue_size: 500
 
       # --- S3 장기 보관 ---
       # s3_bucket 은 Infra/aws-observability 의 telemetry_bucket_name 출력값이다.
@@ -301,6 +410,28 @@ spec:
             - resource
             - batch
           exporters: [otlp/whatap]
+
+        # -----------------------------------------------------
+        # 실험 — 인프라 지표만 쿠버네티스 프로젝트로
+        # -----------------------------------------------------
+        # 위 metrics 파이프라인은 그대로 둔다. 여기는 같은 otlp 수신기에서
+        # 한 벌 더 받아 filter 로 거른 뒤 두 번째 사이드카로 보낸다.
+        # 즉 인프라 지표는 두 프로젝트로 모두 간다 — 실험 중에는
+        # 기존 화면이 비지 않아야 비교가 되기 때문이다.
+        #
+        # 실험 결과에 따라
+        #   성공 → whatap-agent 를 끄고, 위 metrics 에서 k8s.* 를 빼도 된다
+        #   실패 → 이 파이프라인과 사이드카·exporter·filter 를 통째로 지운다
+        metrics/k8s:
+          receivers: [otlp]
+          processors:
+            - memory_limiter
+            - k8sattributes
+            - resourcedetection
+            - resource
+            - filter/k8s_only
+            - batch
+          exporters: [otlp/whatap_k8s]
 
         # 전량 — 와탭(조회)과 S3(장기 보관)
         logs:
