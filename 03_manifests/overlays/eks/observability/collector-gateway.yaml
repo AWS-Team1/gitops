@@ -190,6 +190,22 @@ spec:
           - ".*api[_-]?key.*"
           - ".*cookie.*"
 
+          # ---------------------------------------------------------
+          # 가입 정보 — 값으로는 못 거르는 것들
+          # ---------------------------------------------------------
+          # userservice 의 가입 요청에 들어오는 필드다(userservice.py:104-116).
+          # 계좌번호·라우팅번호는 자리수 패턴으로 잡히지만 이름·생일·주소는
+          # 값만 보고는 구분할 방법이 없다. 키 이름으로 거르는 수밖에 없다.
+          #
+          # accountid·account_num 은 여기 넣지 않는다 — 아래 blocked_values 와
+          # transform 이 값을 이미 치환하므로, 키까지 지우면 상관관계 추적만
+          # 잃고 얻는 게 없다.
+          - ".*firstname.*"
+          - ".*lastname.*"
+          - ".*birthday.*"
+          - ".*address.*"
+          - ".*ssn.*"
+
         # 값 자체가 계좌번호 형태면 지운다. 키 이름을 못 맞춘 경우의 안전망이다.
         blocked_values:
           # Go 정규식(RE2)은 전방·후방 탐색을 지원하지 않는다. 앞서
@@ -213,6 +229,9 @@ spec:
           # 단어 경계를 붙인다 — 경계 없이 걸면 10자리·13자리 숫자 안쪽까지
           # 잘라먹는다. 대신 "rt123456789" 처럼 문자에 붙은 경우는 놓친다.
           - "\\b[0-9]{9}\\b"
+
+          # 주민등록·사회보장번호 형식. 가입 요청의 ssn 필드가 이 모양이다.
+          - "\\b[0-9]{3}-[0-9]{2}-[0-9]{4}\\b"
 
         summary: debug
 
@@ -247,6 +266,7 @@ spec:
               # JWT 치환이 로그에만 있었다. 자동계측이 요청 헤더를 캡처하므로
               # (instrumentation.yaml 의 CAPTURE_HEADERS) 스팬 속성에도 들어온다.
               - replace_all_patterns(span.attributes, "value", "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
+              - replace_all_patterns(span.attributes, "value", "\\b[0-9]{3}-[0-9]{2}-[0-9]{4}\\b", "{ssn}")
 
         log_statements:
           - context: log
@@ -258,6 +278,30 @@ spec:
               - replace_all_patterns(log.attributes, "value", "[0-9]{10}", "{accountId}")
               - replace_all_patterns(log.attributes, "value", "\\b[0-9]{9}\\b", "{routingNum}")
               - replace_all_patterns(log.attributes, "value", "eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}", "{jwt}")
+
+              # ---------------------------------------------------------
+              # 가입 요청 본문 — redaction 이 못 잡는 자리
+              # ---------------------------------------------------------
+              # redaction 의 blocked_key_patterns 는 '속성'에만 걸린다.
+              # 그런데 앱이 요청 dict 를 통째로 본문 문자열에 찍는다 —
+              #   userservice.py:192  logger.debug('validating create user request: %s', str(req))
+              #   contacts.py:155     logger.debug('validating add contact request: %s', str(req))
+              # req 는 평범한 dict 라 본문이 {'ssn': '...', 'password': '...'} 모양이 된다.
+              # 즉 키가 본문 '안'에 있어서 키 필터가 닿지 않는다. 여기서 잡는다.
+              #
+              # 이름·생일·주소는 값만 보고 구분할 방법이 없으므로
+              # 'key': 'value' 쌍을 통째로 바꾼다.
+              # 치환 문자열에 "콜론 + 공백" 을 넣지 말 것. YAML 평문 스칼라가
+              # ": " 를 매핑 키 구분자로 읽어 파일 전체 파싱이 깨진다.
+              - replace_pattern(log.body, "'password[^']*':\\s*'[^']*'", "'password':'{redacted}'")
+              - replace_pattern(log.body, "'ssn':\\s*'[^']*'", "'ssn':'{redacted}'")
+              - replace_pattern(log.body, "'firstname':\\s*'[^']*'", "'firstname':'{redacted}'")
+              - replace_pattern(log.body, "'lastname':\\s*'[^']*'", "'lastname':'{redacted}'")
+              - replace_pattern(log.body, "'birthday':\\s*'[^']*'", "'birthday':'{redacted}'")
+              - replace_pattern(log.body, "'address':\\s*'[^']*'", "'address':'{redacted}'")
+
+              # 값 형식으로 잡히는 것은 따로 한 번 더 — 본문 어디에 있든 걸린다.
+              - replace_pattern(log.body, "\\b[0-9]{3}-[0-9]{2}-[0-9]{4}\\b", "{ssn}")
 
       batch:
         send_batch_size: 8192
